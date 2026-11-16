@@ -192,3 +192,7 @@ pytest
 ```
 
 The tests run the whole pipeline against a fake game install and a stand-in for StarBreaker, so you don't need the game, or even Windows, to run them.
+
+## License
+
+The code in this repo is under the [MIT License](LICENSE). That covers the code only. The game files, and anything you pull out of them, belong to Cloud Imperium Games. The bundled tools keep their own licenses, listed in [The tools behind it](#the-tools-behind-it).
