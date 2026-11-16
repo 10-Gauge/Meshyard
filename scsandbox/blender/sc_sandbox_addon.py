@@ -513,7 +513,7 @@ class SC_OT_make_printable(bpy.types.Operator):
 
         dims = obj.dimensions
         longest = max(dims) or 1.0
-        scale = (st.print_size / 1000.0) / longest  # Blender units are metres; STL is read as mm below
+        scale = (st.print_size / 1000.0) / longest  # Blender units are meters; STL is read as mm below
         obj.scale = (scale, scale, scale)
         bpy.context.view_layer.objects.active = obj
         for o in context.selected_objects:
@@ -525,7 +525,7 @@ class SC_OT_make_printable(bpy.types.Operator):
         rem.voxel_size = st.print_voxel / 1000.0
         rem.use_smooth_shade = False
         bpy.ops.object.modifier_apply(modifier=rem.name)
-        # Write millimetres: slicers read STL units as mm.
+        # Write millimeters: slicers read STL units as mm.
         obj.scale = (1000, 1000, 1000)
         bpy.ops.object.transform_apply(scale=True)
         path = bpy.path.abspath(self.filepath)

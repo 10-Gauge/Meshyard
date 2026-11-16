@@ -26,7 +26,7 @@ def test_trimesh_formats(textured_glb, tmp_path, fmt):
     m = trimesh.load(rep["main"], force="mesh")
     assert len(m.faces) == 12
     if fmt in ("stl", "3mf", "ply"):
-        assert max(m.extents) == pytest.approx(4000, rel=1e-3)   # metres -> mm
+        assert max(m.extents) == pytest.approx(4000, rel=1e-3)   # meters -> mm
         assert m.extents[1] == pytest.approx(4000, rel=1e-3)     # Y-up -> Z-up: length lies along Y
     if fmt in ("obj", "gltf"):
         names = zipfile.ZipFile(rep["download"]).namelist()

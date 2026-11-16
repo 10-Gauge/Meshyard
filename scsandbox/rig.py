@@ -443,12 +443,12 @@ class Weapon:
             parts.append(mm)
         self.mesh = _drop_crumbs(trimesh.util.concatenate(parts))
         lo, hi = self.mesh.bounds
-        self.centre = (lo + hi) / 2
+        self.center = (lo + hi) / 2
         trig = h.get("trigger")
         if trig is None:
             trig = next((h[k] for k in sorted(h) if k.lower().startswith("trigger")), None)
         if trig is None:
-            trig = self.centre.copy()
+            trig = self.center.copy()
         # Every gun is authored in the same frame, the one the game mounts on the hand's
         # weapon bone: barrel along -Z, top along +Y (all muzzle helpers sit at -Z).
         # Guessing it from the mesh failed on guns without muzzle or trigger helpers.
@@ -784,14 +784,14 @@ def build_pose(rig: Rig, pose: str, weapon: Weapon | None, back_z: float, clips:
         if weapon is not None and weapon.kind == "pistol":
             # holstered on the outside of the right thigh, muzzle down, grip back
             thigh = p.pos("RightUpLeg")
-            M_w = weapon.placement(np.array([0, -1.0, 0]), np.array([0, 0, -1.0]), weapon.centre,
+            M_w = weapon.placement(np.array([0, -1.0, 0]), np.array([0, 0, -1.0]), weapon.center,
                                    [thigh[0] + 0.12, thigh[1] - 0.17, thigh[2] + 0.01])
         elif weapon is not None:
             # slung diagonally across the back, barrel up toward the left shoulder, lying on
             # its side, then moved in until it rests against the back
             fwd = np.array([-0.55, 0.83, 0.0])
             side_up = np.cross([0, 0, 1.0], fwd)
-            M_w = weapon.placement(fwd, side_up, weapon.centre, [0.0, 1.22, back_z])
+            M_w = weapon.placement(fwd, side_up, weapon.center, [0.0, 1.22, back_z])
             z = (weapon.mesh.vertices @ M_w[:3, :3].T + M_w[:3, 3])[:, 2]
             M_w[2, 3] += back_z + 0.005 - float(np.percentile(z, 3))
         return (p.solve(base=relaxed_base) if relaxed_base else p.solve(root)), M_w

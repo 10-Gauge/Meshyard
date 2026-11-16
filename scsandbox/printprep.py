@@ -31,8 +31,8 @@ The routine (solid mode)
 Parts mode keeps each part as its own body (for kits and painting), repairs
 it, thickens slender parts to the minimum and can add a separate stand.
 
-Game units are metres, glTF is Y-up; output is millimetres, Z-up, sitting on
-the bed (z = 0) and centred on the origin.
+Game units are meters, glTF is Y-up; output is millimeters, Z-up, sitting on
+the bed (z = 0) and centered on the origin.
 """
 
 from __future__ import annotations
@@ -296,7 +296,7 @@ def apply_overrides(parts, opts: PrintOptions, log=print):
 
 
 def _scale_text(scale: float) -> str:
-    """scale is mm per game metre."""
+    """scale is mm per game meter."""
     ratio = 1000 / scale
     return f"1:{ratio:.0f}" if ratio >= 1 else f"{1 / ratio:.2f}:1"
 
@@ -342,7 +342,7 @@ class Grid:
             field = np.pad(self.v, 2).astype(np.float32)
             if smooth:
                 # A hard 0/1 grid meshes as voxel-sized terraces; blurring it first gives
-                # a field whose 0.5 level crosses between voxel centres.
+                # a field whose 0.5 level crosses between voxel centers.
                 ndimage.gaussian_filter(field, sigma=SMOOTH_SIGMA_VOXELS, output=field, truncate=3.0)
         elif self.add_sdf or self.cut_sdf:
             self._apply_exact(field)
@@ -387,7 +387,7 @@ class Grid:
         from scipy.spatial import cKDTree
         p, band_w = self.pitch, 2
         cap = np.float32((band_w + 1) * p)
-        # thinner than ~0.9 voxel and the sampled sheet breaks up between voxel centres
+        # thinner than ~0.9 voxel and the sampled sheet breaks up between voxel centers
         skin = np.float32(max(SKIN_MM, 0.9 * p))
         cross = ndimage.generate_binary_structure(3, 1)
         edge = self.v & ~ndimage.binary_erosion(self.v, structure=cross)  # inner boundary layer
@@ -411,9 +411,9 @@ class Grid:
         tree = cKDTree(pts)
         bi = np.nonzero(band)
         del band
-        centres = self.origin + (np.stack(bi, axis=1) + 0.5) * p
-        d, _ = tree.query(centres, workers=-1, distance_upper_bound=float(cap))
-        del tree, pts, centres
+        centers = self.origin + (np.stack(bi, axis=1) + 0.5) * p
+        d, _ = tree.query(centers, workers=-1, distance_upper_bound=float(cap))
+        del tree, pts, centers
         d = np.minimum(d, cap).astype(np.float32)
         # core: blurred occupancy as an approximate distance, shifted one voxel inward
         field = self.v.astype(np.float32)
@@ -581,7 +581,7 @@ class StandSpec:
 
 
 def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
-    """Pick where the post meets the model: under the centre of mass, where the
+    """Pick where the post meets the model: under the center of mass, where the
     model is thick enough to take the peg socket."""
     from scipy import ndimage
     size = opts.size_mm
@@ -596,7 +596,7 @@ def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
     cols = np.argwhere(any_z)
     if len(cols) == 0:
         raise ValueError("Nothing to put on a stand")
-    # Evaluate a window of columns around the centre of mass (cheap and stable).
+    # Evaluate a window of columns around the center of mass (cheap and stable).
     rad = int(math.ceil(max(g.shape[:2]) * 0.25))
     cx, cy = int(com[0]), int(com[1])
     best, best_score = None, -1e18
@@ -610,7 +610,7 @@ def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
             gap = np.argmin(col) if not col.all() else len(col)
             run[i, j] = gap
             d = math.hypot(i - cx, j - cy) * g.pitch
-            # prefer columns that fit the socket, then close to the centre of mass, then low
+            # prefer columns that fit the socket, then close to the center of mass, then low
             score = (1e6 if gap >= need else gap * 100) - d * 10 - low[i, j] * g.pitch
             if score > best_score:
                 best, best_score = (i, j), score
@@ -618,7 +618,7 @@ def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
     fit = run[i, j] * g.pitch
     if fit < peg_depth + 1.0:
         peg_depth = max(2.0, fit - 1.0)
-        log(f"  the model is thin under its centre: socket depth limited to {peg_depth:.1f} mm")
+        log(f"  the model is thin under its center: socket depth limited to {peg_depth:.1f} mm")
     x = g.origin[0] + (i + 0.5) * g.pitch
     y = g.origin[1] + (j + 0.5) * g.pitch
     # On a sloped underside (a tilted display angle) the socket's far edge is higher than
@@ -688,7 +688,7 @@ def _plate_text(s: StandSpec):
     """The plate rasterised once: (bool image, px per mm, u0, v_top) where u runs along
     x and v up the bevelled face; None without a plate. Layout: the logo (if any) on
     the left at the face's full height, then the text: one line, or two with the
-    second about 70% the size of the first, each centred."""
+    second about 70% the size of the first, each centered."""
     if not _has_plate(s):
         return None
     from PIL import Image, ImageDraw, ImageFont
@@ -752,8 +752,8 @@ def _plate_text(s: StandSpec):
         img.paste(im, (x + (block_w - im.width) // 2, y), im)
         y += im.height + int(0.18 * size)
     a = np.asarray(img) > 127
-    u0 = (x0 + x1) / 2 - a.shape[1] / px_mm / 2           # centred along the plate
-    v_top = face_len / 2 + a.shape[0] / px_mm / 2          # centred up the face
+    u0 = (x0 + x1) / 2 - a.shape[1] / px_mm / 2           # centered along the plate
+    v_top = face_len / 2 + a.shape[0] / px_mm / 2          # centered up the face
     return a, px_mm, u0, v_top
 
 
@@ -1087,7 +1087,7 @@ def prepare(glb: Path, out: Path, opts: PrintOptions, log=print) -> dict:
 
 
 def _layout(bodies) -> None:
-    """Model centred on the bed, extra bodies (the stand) beside it on +X."""
+    """Model centered on the bed, extra bodies (the stand) beside it on +X."""
     _place_on_bed(bodies[0][1])
     x = bodies[0][1].bounds[1][0]
     for _, m in bodies[1:]:

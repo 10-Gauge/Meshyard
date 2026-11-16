@@ -65,11 +65,11 @@ def test_curl_bends_fingers_toward_the_palm():
 
 
 def _gun(tmp_path, helpers, boxes):
-    """A weapon GLB: boxes ((size, centre), ...) and named helper points (game Y-up frame)."""
+    """A weapon GLB: boxes ((size, center), ...) and named helper points (game Y-up frame)."""
     sc = trimesh.Scene()
-    for i, (size, centre) in enumerate(boxes):
+    for i, (size, center) in enumerate(boxes):
         b = trimesh.creation.box(size)
-        b.apply_translation(centre)
+        b.apply_translation(center)
         sc.add_geometry(b, node_name=f"part{i}", geom_name=f"part{i}")
     for name, p in helpers.items():
         sc.graph.update(frame_to=name, frame_from=sc.graph.base_frame, matrix=trimesh.transformations.translation_matrix(p))

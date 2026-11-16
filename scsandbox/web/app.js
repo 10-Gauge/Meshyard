@@ -506,7 +506,7 @@ $("c-build").onclick = async () => {
       const picked = [...$("c-slots").querySelectorAll("select")].filter((s) => s.value).map((s) => s.selectedOptions[0].textContent);
       if (pose) picked.push($("c-pose").selectedOptions[0].textContent);
       if (weapon) picked.push($("c-weapon").selectedOptions[0].textContent);
-      state.selected = { figure: r.figure, name, meta: `${body} · ${picked.join(" · ") || "no armour"}` };
+      state.selected = { figure: r.figure, name, meta: `${body} · ${picked.join(" · ") || "no armor"}` };
       showFigureInfo(state.selected);
       $("p-result").textContent = "";
       $("m-result").textContent = "";

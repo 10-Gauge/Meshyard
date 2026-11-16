@@ -145,7 +145,7 @@ public sealed partial class CharacterPanel : UserControl
             s.Select(new Target
             {
                 Figure = r.Str("figure"), FigureUrl = r.Str("url"), Name = FigureName(),
-                Meta = $"{(Body == "male" ? "Male" : "Female")} · {(parts.Count > 0 ? string.Join(" · ", parts) : "no armour")}",
+                Meta = $"{(Body == "male" ? "Male" : "Female")} · {(parts.Count > 0 ? string.Join(" · ", parts) : "no armor")}",
                 Description = "Built from your selections. The print settings apply to the figure; its size is its height.",
             });
             SetBusy(null);

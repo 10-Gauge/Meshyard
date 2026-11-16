@@ -34,7 +34,7 @@
                 <NavigationViewItem x:Name="NavBrowse" Content="Browse" Tag="browse" ToolTipService.ToolTip="Browse ships, vehicles and items">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8F1;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Characters" Tag="characters" ToolTipService.ToolTip="Build a posed, armoured character figure">
+                <NavigationViewItem Content="Characters" Tag="characters" ToolTipService.ToolTip="Build a posed, armored character figure">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE77B;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Blender sandbox" Tag="blender" ToolTipService.ToolTip="Spawn assets into a Blender scene">

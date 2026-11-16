@@ -3,9 +3,9 @@
 trimesh writes GLB, glTF, OBJ (+MTL and textures), DAE, PLY, STL and 3MF.
 FBX, USDZ and .blend go through Blender (headless) when it is installed.
 
-Game units are metres and glTF is Y-up. GLB/glTF/OBJ/DAE/FBX/USDZ/.blend keep
-metres and the game's orientation (what engines and DCC tools expect). STL,
-3MF and PLY are converted to millimetres and Z-up, which is what slicers and
+Game units are meters and glTF is Y-up. GLB/glTF/OBJ/DAE/FBX/USDZ/.blend keep
+meters and the game's orientation (what engines and DCC tools expect). STL,
+3MF and PLY are converted to millimeters and Z-up, which is what slicers and
 CAD tools assume.
 """
 
@@ -31,7 +31,7 @@ LABELS = {
     "usdz": "USDZ (via Blender)", "blend": "Blender .blend (via Blender)",
     "ply": "PLY (mm, Z-up)", "stl": "STL (mm, Z-up)", "3mf": "3MF (mm, Z-up)",
 }
-PRINT_STYLE = ("ply", "stl", "3mf")  # millimetres, Z-up
+PRINT_STYLE = ("ply", "stl", "3mf")  # millimeters, Z-up
 
 _BLENDER_SCRIPT = r'''
 import bpy, sys

@@ -1,4 +1,4 @@
-"""Character builder: assemble a body, head and chosen armour/clothing pieces into one
+"""Character builder: assemble a body, head and chosen armor/clothing pieces into one
 model for previewing and printing.
 
 Every wearable item in the index lists its worn mesh (.skin) for the male and the
@@ -31,9 +31,9 @@ SLOTS = {
     "undersuit": ("Undersuit", ["characters/human/armor/pu_armor/undersuit"]),
     "suit": ("Full suit (one piece)", ["characters/human/armor/pu_armor/bespokesuit"]),
     "helmet": ("Helmet", ["characters/human/starwear/helmet/%"]),
-    "core": ("Torso armour", ["characters/human/armor/pu_armor/%/core"]),
-    "arms": ("Arm armour", ["characters/human/armor/pu_armor/%/arms"]),
-    "legs": ("Leg armour", ["characters/human/armor/pu_armor/%/legs"]),
+    "core": ("Torso armor", ["characters/human/armor/pu_armor/%/core"]),
+    "arms": ("Arm armor", ["characters/human/armor/pu_armor/%/arms"]),
+    "legs": ("Leg armor", ["characters/human/armor/pu_armor/%/legs"]),
     "torso": ("Shirt / jacket", ["characters/human/clothing/pu_clothing/clothing_torso0",
                                   "characters/human/clothing/pu_clothing/clothing_torso1"]),
     "pants": ("Pants", ["characters/human/clothing/pu_clothing/clothing_legs"]),
@@ -76,7 +76,7 @@ def items(con, slot: str, body: str, q: str = "", limit: int = 400) -> list[dict
         if "UNINITIALIZED" in (a.get("name") or "") or not worn_skins(a, body):
             continue
         key = (a["name"], tuple(worn_skins(a, body)))
-        if key in seen:  # colour variants that share the same mesh and name
+        if key in seen:  # color variants that share the same mesh and name
             continue
         seen.add(key)
         out.append({"id": a["id"], "name": a["name"], "record": a["record"]})

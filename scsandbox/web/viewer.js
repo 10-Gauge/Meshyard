@@ -64,7 +64,7 @@ export function createViewer(el, { onMessage } = {}) {
       // compiles every light into every material's shader, which stalls or fails and leaves only
       // the grid on screen, so drop them and rely on the viewer's own lighting.
       const lights = [];
-      // COLOR_0 holds the game's tint/wear masks, not paint; drawn as colour it turns ships purple.
+      // COLOR_0 holds the game's tint/wear masks, not paint; drawn as color it turns ships purple.
       current.traverse((o) => {
         if (o.isLight) lights.push(o);
         for (const m of o.isMesh ? [].concat(o.material) : []) {

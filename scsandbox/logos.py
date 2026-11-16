@@ -2,7 +2,7 @@
 
 Data.p4k carries a logo stencil per manufacturer under Data/Textures/Branding/<CODE>/
 (e.g. aegs_logo_stencil_02_stencil.dds): the symbol on top, the wordmark below, in
-the colour channels a tint mask uses. The symbol alone reads at name-plate size, so
+the color channels a tint mask uses. The symbol alone reads at name-plate size, so
 it's cut out and saved as a white-on-black mask that printprep embosses.
 """
 

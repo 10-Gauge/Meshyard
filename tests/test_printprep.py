@@ -6,7 +6,7 @@ from scsandbox import printprep
 
 
 def make_ship_glb(path):
-    """A fake 'ship' in metres, Y-up: open hull shell, wings, a collision proxy and an LOD copy."""
+    """A fake 'ship' in meters, Y-up: open hull shell, wings, a collision proxy and an LOD copy."""
     scene = trimesh.Scene()
     hull = trimesh.creation.capsule(height=10, radius=1.5)
     hull.update_faces(np.arange(len(hull.faces))[20:])  # punch a hole: open shell like game meshes
@@ -196,7 +196,7 @@ def test_sloped_surfaces_are_flat_not_stair_stepped(tmp_path):
     rep = printprep.prepare(tmp_path / "w.glb", tmp_path / "w", printprep.PrintOptions(size_mm=60, voxel_mm=0.3, format="stl",
                             thicken=False), log=lambda *_: None)
     m = trimesh.load(rep["files"][0])
-    # neighbouring faces on a flat slab should be almost coplanar; voxel steps give ~20-45 degrees
+    # neighboring faces on a flat slab should be almost coplanar; voxel steps give ~20-45 degrees
     assert np.degrees(np.percentile(m.face_adjacency_angles, 90)) < 3
     assert m.is_watertight
 
