@@ -94,6 +94,17 @@
                                   Toggled="Gear_Toggled" AutomationProperties.Name="VTOL mode" />
                 </Grid>
 
+                <Grid x:Name="FlightRow" ColumnSpacing="12" Margin="2,0,0,0"
+                      ToolTipService.ToolTip="Show and print the ship in flight mode, flaps open (Stingray)">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE709;" FontSize="16" VerticalAlignment="Center" />
+                    <ToggleSwitch x:Name="FlightSwitch" Grid.Column="1" Header="Flight mode" OffContent="Off" OnContent="Flaps open"
+                                  Toggled="Gear_Toggled" AutomationProperties.Name="Flight mode" />
+                </Grid>
+
                 <!-- 3D print -->
                 <Expander x:Name="PrintExpander" IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>

@@ -37,7 +37,8 @@ KINDS = {"gear": ("gearup", "gearup", "landing gear"),
          "weapons_out": ("weapons_out", "wout", "deployable weapons"),
          "weapons_in": ("weapons_in", "win", "deployable weapons"),
          "landed": ("landed", "landed", "landed shape"),
-         "vtol": ("vtol", "vtol", "VTOL mode")}
+         "vtol": ("vtol", "vtol", "VTOL mode"),
+         "flight": ("flight", "flight", "flight mode")}
 SCRIPT = Path(__file__).parent / "blender" / "gear_pose.py"
 # the root node of a landing gear item mounted on the ship ("AEGS_Gladius_LandingGear_Front.cdf",
 # "..._LandingGear_BackLeft_Anim"), not the ship's own gear doors or mount points
@@ -80,7 +81,7 @@ def pose_for(install: Install, settings: dict, asset: dict, log=print, kind: str
         raw = out / f"{kind}_pose_raw.json"
         log({"gear": "posing the landing gear up", "weapons_out": "deploying the weapons",
              "weapons_in": "stowing the weapons", "landed": "folding the ship into its landed shape",
-             "vtol": "swinging the thrusters into VTOL mode"}[kind] + " (Blender, StarBreaker add-on)")
+             "vtol": "swinging the thrusters into VTOL mode", "flight": "opening the flaps for flight"}[kind] + " (Blender, StarBreaker add-on)")
         raw.unlink(missing_ok=True)
         try:
             # clean environment and closed stdin: the packaged engine's own Python settings
@@ -267,9 +268,9 @@ def has_landed_shape(install: Install, asset: dict) -> bool:
 
 
 def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_up: bool = False,
-              weapons: str | None = None, log=print, vtol: bool = False) -> Path:
-    """The ship's model for `variant` with the gear up, the weapons "out" or "in" and/or
-    the thrusters in VTOL mode (cached; stacked in that order). With the gear down, ships
+              weapons: str | None = None, log=print, vtol: bool = False, flight: bool = False) -> Path:
+    """The ship's model for `variant` with the gear up, the weapons "out" or "in", the
+    thrusters in VTOL mode and/or flight mode (flaps open) (cached; stacked in that order). With the gear down, ships
     that change shape on the ground (the Eclipse and Stingray fold their wings) get that
     shape once it's known: it's worked out alongside the gear-up pose."""
     glb = models.glb_for(install, settings, asset, variant, log=log)
@@ -284,7 +285,7 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
             pass
     landed = not gear_up and has_landed_shape(install, asset)
     kinds = (["gear"] if gear_up else []) + (["landed"] if landed else []) \
-        + ([f"weapons_{weapons}"] if weapons in ("out", "in") else []) + (["vtol"] if vtol else [])
+        + ([f"weapons_{weapons}"] if weapons in ("out", "in") else []) + (["vtol"] if vtol else []) + (["flight"] if flight else [])
     for kind in kinds:
         out = glb.with_name(glb.name[:-4] + f".{KINDS[kind][1]}.glb")
         if not (out.exists() and out.stat().st_mtime >= glb.stat().st_mtime):

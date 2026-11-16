@@ -80,6 +80,12 @@ try:
                 plan.append((n, "snap_first"))
             elif re.search(r"^fragment:0:aegs_eclipse_gun_bay$", low):
                 plan.append((n, "snap_last"))
+    elif kind == "flight":
+        # flight mode: flaps open (the Stingray's "flap_deploy", and its "fap_retract")
+        for n in names:
+            m = re.search(r"(^|_|:)(flaps?|faps?)_(deploy|open|extend|retract|close)$", n.lower())
+            if m:
+                plan.append((n, "snap_first" if m.group(3) in ("retract", "close") else "snap_last"))
     elif kind == "vtol":
         # thrusters that swing down for vertical flight: "nacelles_deploy" (Starlifter, Golem,
         # RAFT), "vtol_deploy" (Paladin, Hull B, Asgard, Fury), "nacelles_open" (Starlancer),
@@ -137,7 +143,7 @@ try:
         reset()
         return best
 
-    if kind == "landed" and plan:
+    if kind == "landed":
         # Most ships are exported gear down. A few (the Stingray) come gear up: their
         # landed shape puts the gear down as well.
         up, down = most_moved(gear_plan(True)), most_moved(gear_plan(False))

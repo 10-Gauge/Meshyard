@@ -114,7 +114,7 @@ def test_posed_glb_stacks_gear_and_weapons_and_names_the_missing_pose(tmp_path, 
         calls.append(kind)
         if kind == "gear":
             return {"blender": {"anchors": wpose["blender"]["anchors"], "objects": {}}}
-        if kind in ("weapons_in", "vtol"):
+        if kind in ("weapons_in", "vtol", "flight"):
             raise gear.NoPose(f"this ship has no {gear.KINDS[kind][2]} animation")
         if kind == "landed":  # this ship looks the same on the ground
             (tmp_path / "X.landed.json").write_text('{"version": 1, "blender": {"objects": {}}}')
@@ -134,6 +134,11 @@ def test_posed_glb_stacks_gear_and_weapons_and_names_the_missing_pose(tmp_path, 
         raise AssertionError("expected NoPose")
     except gear.NoPose as e:
         assert e.kind == "vtol"
+    try:
+        gear.posed_glb(None, {}, {"record": "X"}, "preview", flight=True, log=lambda *_: None)
+        raise AssertionError("expected NoPose")
+    except gear.NoPose as e:
+        assert e.kind == "flight"
     try:
         gear.posed_glb(None, {}, {"record": "X"}, "preview", weapons="in", log=lambda *_: None)
         raise AssertionError("expected NoPose")
