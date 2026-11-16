@@ -134,6 +134,8 @@ public sealed partial class Inspector : UserControl
         // ships have landing gear; the switch keeps its setting from ship to ship
         GearRow.Visibility = t.Asset?.Category == "spaceships" ? Visibility.Visible : Visibility.Collapsed;
         WeaponsRow.Visibility = GearRow.Visibility;
+        VtolRow.Visibility = GearRow.Visibility;
+        FlightRow.Visibility = GearRow.Visibility;
         PrintResult.IsOpen = false;
         ExportResult.IsOpen = false;
         PlateText.Text = t.Name;
@@ -163,6 +165,8 @@ public sealed partial class Inspector : UserControl
 
     bool GearUp => GearSwitch.IsOn && GearRow.Visibility == Visibility.Visible && _state?.Selected?.Asset != null;
     bool WeaponsOut => WeaponsSwitch.IsOn && WeaponsRow.Visibility == Visibility.Visible && _state?.Selected?.Asset != null;
+    bool VtolOn => VtolSwitch.IsOn && VtolRow.Visibility == Visibility.Visible && _state?.Selected?.Asset != null;
+    bool FlightOn => FlightSwitch.IsOn && FlightRow.Visibility == Visibility.Visible && _state?.Selected?.Asset != null;
 
     void Gear_Toggled(object sender, RoutedEventArgs e)
     {
@@ -180,11 +184,14 @@ public sealed partial class Inspector : UserControl
         var seq = spawn ? _loadSeq : ++_loadSeq;
         var gearUp = GearUp && variant != "animated";
         var weaponsOut = WeaponsOut && variant != "animated";
+        var vtol = VtolOn && variant != "animated";
+        var flight = FlightOn && variant != "animated";
         if (!spawn)
         {
             _variant = variant;
-            await s.Viewer.Clear(gearUp || weaponsOut
-                ? (gearUp ? "Retracting the landing gear" : "Deploying the weapons")
+            await s.Viewer.Clear(gearUp || weaponsOut || vtol || flight
+                ? (gearUp ? "Retracting the landing gear" : weaponsOut ? "Deploying the weapons"
+                   : vtol ? "Swinging the thrusters into VTOL mode" : "Opening the flaps")
                   + "… the first time for each ship takes a little longer."
                 : "Exporting the model… big ships can take a minute or two the first time.");
         }
@@ -193,7 +200,7 @@ public sealed partial class Inspector : UserControl
             var job = await s.Api.StartJobAsync("api/model", new JsonObject
             {
                 ["channel"] = s.Channel, ["id"] = t.Asset.Id, ["variant"] = variant, ["spawn"] = spawn,
-                ["gear"] = gearUp ? "up" : "down", ["weapons"] = weaponsOut ? "out" : "",
+                ["gear"] = gearUp ? "up" : "down", ["weapons"] = weaponsOut ? "out" : "", ["vtol"] = vtol, ["flight"] = flight,
             });
             var r = await s.Jobs.RunAsync(job);
             if (!spawn && seq == _loadSeq && r.Str("url") is { Length: > 0 } url)
@@ -220,6 +227,26 @@ public sealed partial class Inspector : UserControl
                 _main!.ShowError("This ship has no deployable weapons", LastLines(e.Message));
                 _settingGear = true;
                 WeaponsSwitch.IsOn = false;
+                _settingGear = false;
+                if (!spawn && seq == _loadSeq) _ = LoadModel(variant);
+                return;
+            }
+            if (vtol && e.Message.Contains("VTOL", StringComparison.Ordinal))
+            {
+                // most ships have no VTOL mode: say so, and show it as exported
+                _main!.ShowError("This ship has no VTOL mode", LastLines(e.Message));
+                _settingGear = true;
+                VtolSwitch.IsOn = false;
+                _settingGear = false;
+                if (!spawn && seq == _loadSeq) _ = LoadModel(variant);
+                return;
+            }
+            if (flight && e.Message.Contains("flight mode", StringComparison.Ordinal))
+            {
+                // only a few ships have flaps that open for flight: say so, and show it as exported
+                _main!.ShowError("This ship has no flight mode flaps", LastLines(e.Message));
+                _settingGear = true;
+                FlightSwitch.IsOn = false;
                 _settingGear = false;
                 if (!spawn && seq == _loadSeq) _ = LoadModel(variant);
                 return;
@@ -358,6 +385,8 @@ public sealed partial class Inspector : UserControl
         t.AddTo(body);
         if (GearUp) body["gear"] = "up";
         if (WeaponsOut) body["weapons"] = "out";
+        if (VtolOn) body["vtol"] = true;
+        if (FlightOn) body["flight"] = true;
         return body;
     }
 

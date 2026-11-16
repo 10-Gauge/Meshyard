@@ -1,5 +1,7 @@
-"""Animated poses for ships: landing gear up, and deployable weapons out or stowed
-(the Alpha Wolf's cannons, the M80's guns and missile racks).
+"""Animated poses for ships: landing gear up, deployable weapons out or stowed (the Alpha
+Wolf's cannons, the M80's guns and missile racks), the landed shape that goes with the
+gear down (the Eclipse and Stingray fold their wings) and VTOL mode (the Starlifter's
+nacelles swing down).
 
 StarBreaker exports ships in their bind pose (gear down). The other poses live in the
 ship's animation clips, which only StarBreaker's Blender add-on decodes
@@ -33,7 +35,10 @@ POSE_VERSION = 1
 # pose kind -> (cache name, file suffix, what it is in messages)
 KINDS = {"gear": ("gearup", "gearup", "landing gear"),
          "weapons_out": ("weapons_out", "wout", "deployable weapons"),
-         "weapons_in": ("weapons_in", "win", "deployable weapons")}
+         "weapons_in": ("weapons_in", "win", "deployable weapons"),
+         "landed": ("landed", "landed", "landed shape"),
+         "vtol": ("vtol", "vtol", "VTOL mode"),
+         "flight": ("flight", "flight", "flight mode")}
 SCRIPT = Path(__file__).parent / "blender" / "gear_pose.py"
 # the root node of a landing gear item mounted on the ship ("AEGS_Gladius_LandingGear_Front.cdf",
 # "..._LandingGear_BackLeft_Anim"), not the ship's own gear doors or mount points
@@ -75,7 +80,8 @@ def pose_for(install: Install, settings: dict, asset: dict, log=print, kind: str
             raise tools.ToolError(f"StarBreaker wrote no scene.blend under {out}")
         raw = out / f"{kind}_pose_raw.json"
         log({"gear": "posing the landing gear up", "weapons_out": "deploying the weapons",
-             "weapons_in": "stowing the weapons"}[kind] + " (Blender, StarBreaker add-on)")
+             "weapons_in": "stowing the weapons", "landed": "folding the ship into its landed shape",
+             "vtol": "swinging the thrusters into VTOL mode", "flight": "opening the flaps for flight"}[kind] + " (Blender, StarBreaker add-on)")
         raw.unlink(missing_ok=True)
         try:
             # clean environment and closed stdin: the packaged engine's own Python settings
@@ -251,12 +257,35 @@ def apply_pose(glb: Path, out: Path, pose: dict, log=print, hide_gear: bool = Tr
     return count
 
 
+def has_landed_shape(install: Install, asset: dict) -> bool:
+    """Whether the ship's landed shape is known and differs from its export (worked out
+    with its gear pose, so no Blender run is needed to answer)."""
+    try:
+        data = json.loads(_pose_path(install, asset, "landed").read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+    return data.get("version") == POSE_VERSION and bool((data.get("blender") or {}).get("objects"))
+
+
 def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_up: bool = False,
-              weapons: str | None = None, log=print) -> Path:
-    """The ship's model for `variant` with the gear up and/or the weapons "out" or "in"
-    (cached; stacked in that order)."""
+              weapons: str | None = None, log=print, vtol: bool = False, flight: bool = False) -> Path:
+    """The ship's model for `variant` with the gear up, the weapons "out" or "in", the
+    thrusters in VTOL mode and/or flight mode (flaps open) (cached; stacked in that order). With the gear down, ships
+    that change shape on the ground (the Eclipse and Stingray fold their wings) get that
+    shape once it's known: it's worked out alongside the gear-up pose."""
     glb = models.glb_for(install, settings, asset, variant, log=log)
-    kinds = (["gear"] if gear_up else []) + ([f"weapons_{weapons}"] if weapons in ("out", "in") else [])
+    try:
+        landed_known = _pose_path(install, asset, "landed").exists()
+    except (AttributeError, TypeError, OSError):
+        landed_known = False
+    if gear_up and not landed_known:
+        try:  # the landed shape comes from the same rig; get it now so gear down can show it
+            pose_for(install, settings, asset, log, kind="landed")
+        except (NoPose, tools.ToolError):
+            pass
+    landed = not gear_up and has_landed_shape(install, asset)
+    kinds = (["gear"] if gear_up else []) + (["landed"] if landed else []) \
+        + ([f"weapons_{weapons}"] if weapons in ("out", "in") else []) + (["vtol"] if vtol else []) + (["flight"] if flight else [])
     for kind in kinds:
         out = glb.with_name(glb.name[:-4] + f".{KINDS[kind][1]}.glb")
         if not (out.exists() and out.stat().st_mtime >= glb.stat().st_mtime):
@@ -267,8 +296,12 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
                 if n == 0:
                     tmp.unlink(missing_ok=True)
                     raise NoPose(f"none of the {KINDS[kind][2]} parts were found in the model")
-            except NoPose as e:
-                e.kind = kind
+            except (NoPose, tools.ToolError) as e:
+                if kind == "landed":  # an extra: the plain gear-down model will do
+                    log(f"landed shape skipped: {e}")
+                    continue
+                if isinstance(e, NoPose):
+                    e.kind = kind
                 raise
             tmp.replace(out)
         glb = out

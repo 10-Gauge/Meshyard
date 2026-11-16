@@ -108,23 +108,57 @@ def test_posed_glb_stacks_gear_and_weapons_and_names_the_missing_pose(tmp_path, 
     monkeypatch.setattr(models, "glb_for", lambda *a, **k: glb)
     calls = []
 
+    monkeypatch.setattr(gear, "_pose_path", lambda install, asset, kind="gear": tmp_path / f"X.{kind}.json")
+
     def fake_pose(install, settings, asset, log=print, kind="gear"):
         calls.append(kind)
         if kind == "gear":
             return {"blender": {"anchors": wpose["blender"]["anchors"], "objects": {}}}
-        if kind == "weapons_in":
-            raise gear.NoPose("this ship has no deployable weapons animation")
+        if kind in ("weapons_in", "vtol", "flight"):
+            raise gear.NoPose(f"this ship has no {gear.KINDS[kind][2]} animation")
+        if kind == "landed":  # this ship looks the same on the ground
+            (tmp_path / "X.landed.json").write_text('{"version": 1, "blender": {"objects": {}}}')
+            raise gear.NoPose("this ship has no landed shape animation")
         return wpose
 
     monkeypatch.setattr(gear, "pose_for", fake_pose)
     monkeypatch.setattr(gear, "apply_pose", lambda g, o, p, log=print, hide_gear=True:
                         (__import__("shutil").copyfile(g, o), 1)[1])
     out = gear.posed_glb(None, {}, {"record": "X"}, "preview", gear_up=True, weapons="out", log=lambda *_: None)
-    assert out.name == "ship.preview-l.gearup.wout.glb" and calls == ["gear", "weapons_out"]
+    # raising the gear also works out the landed shape, once
+    assert out.name == "ship.preview-l.gearup.wout.glb" and calls == ["landed", "gear", "weapons_out"]
     assert gear.posed_glb(None, {}, {"record": "X"}, "preview", gear_up=True, weapons="out") == out  # cached
-    assert calls == ["gear", "weapons_out"]
+    assert calls == ["landed", "gear", "weapons_out"]
+    try:
+        gear.posed_glb(None, {}, {"record": "X"}, "preview", vtol=True, log=lambda *_: None)
+        raise AssertionError("expected NoPose")
+    except gear.NoPose as e:
+        assert e.kind == "vtol"
+    try:
+        gear.posed_glb(None, {}, {"record": "X"}, "preview", flight=True, log=lambda *_: None)
+        raise AssertionError("expected NoPose")
+    except gear.NoPose as e:
+        assert e.kind == "flight"
     try:
         gear.posed_glb(None, {}, {"record": "X"}, "preview", weapons="in", log=lambda *_: None)
         raise AssertionError("expected NoPose")
     except gear.NoPose as e:
         assert e.kind == "weapons_in"
+
+
+def test_gear_down_shows_the_landed_shape_once_it_is_known(tmp_path, monkeypatch):
+    """The Eclipse and Stingray fold their wings on the ground. Their export has the gear
+    down but the wings flat, so gear down gets the landed pose when the ship has one."""
+    glb, wing = _gun_ship(tmp_path)   # the "arm" stands in for a folding wingtip
+    from scsandbox import models
+    monkeypatch.setattr(models, "glb_for", lambda *a, **k: glb)
+    monkeypatch.setattr(gear, "_pose_path", lambda install, asset, kind="gear": tmp_path / f"X.{kind}.json")
+    monkeypatch.setattr(gear, "pose_for", lambda install, settings, asset, log=print, kind="gear": wing)
+    # not known yet: the plain export, no Blender run
+    assert gear.posed_glb(None, {}, {"record": "X"}, "preview") == glb
+    (tmp_path / "X.landed.json").write_text(json.dumps(wing))
+    out = gear.posed_glb(None, {}, {"record": "X"}, "preview", log=lambda *_: None)
+    assert out.name == "ship.preview-l.landed.glb"
+    sc = trimesh.load(out, force="scene")
+    assert abs(sc.graph.get("anim_cannon_left")[0][1, 3] - 1) < 1e-6   # folded
+    assert "Ship_LandingGear_Front_Anim" in sc.graph.nodes_geometry   # gear still down

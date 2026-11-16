@@ -10,7 +10,7 @@ It runs on your own PC against your own copy of the game. It only ever reads `Da
 
 Grab **[SC-Asset-Browser.exe](https://github.com/10-Gauge/SC-Asset-Browser/releases/latest/download/SC-Asset-Browser.exe)** and double-click it. There's no installer. It's around 200 MB, and the tools it uses to read the game files come inside it.
 
-The one thing it doesn't bring along is [Blender](https://www.blender.org/download/). Browsing, previews, 3D printing and most exports work fine without it. You only need it for the landing gear and weapon switches, for FBX, USDZ and `.blend` export, and for the sandbox. It's free. If the app can't find Blender, it tells you on first launch and gives you a download link. After that a note stays at the top of the window, with a **Check again** button for once you've installed it.
+The one thing it doesn't bring along is [Blender](https://www.blender.org/download/). Browsing, previews, 3D printing and most exports work fine without it. You only need it for the landing gear, weapon, VTOL and flight mode switches, for FBX, USDZ and `.blend` export, and for the sandbox. It's free. If the app can't find Blender, it tells you on first launch and gives you a download link. After that a note stays at the top of the window, with a **Check again** button for once you've installed it.
 
 Windows SmartScreen will probably complain the first time because the exe isn't code-signed. Click *More info*, then *Run anyway*.
 
@@ -34,8 +34,10 @@ If you have LIVE and PTU installed, switch between them with the box at the top.
 
 For ships there are two switches in the panel on the right:
 
-- **Landing gear** shows the ship with its gear up and the gear doors shut, taken from the ship's own retract animation. The first time you do it for a ship it takes 10 to 30 seconds; after that it's instant.
+- **Landing gear** shows the ship with its gear up and the gear doors shut, taken from the ship's own retract animation. The first time you do it for a ship it takes 10 to 30 seconds; after that it's instant. Ships that change shape on the ground show that shape with the gear down: the Eclipse, Stingray, Talon, Vanguard and Zeus fold their wings, the Clipper stands on its wings, and the Mole, Moth, Golem, Pitbull, Apollo, Hermes and others move engines or wings with their gear. The shape shows once you've raised the gear on that ship once.
 - **Weapons** shows deployable guns out, like the cannon pods on the Alpha Wolf or the guns and missile racks on the M80. Ships with fixed guns just say so.
+- **VTOL mode** swings the thrusters down for vertical flight, like the Starlifter's wing nacelles, the Paladin or the Golem. Ships without one just say so.
+- **Flight mode** shows ships that fly in a different shape: the Stingray opens its flaps, the Reliant stands its wings upright and the Corsair spreads them.
 
 Both switches carry through to prints and exports, and you can use them together.
 
@@ -128,7 +130,7 @@ The app stands on the shoulders of some excellent free tools. StarBreaker and cg
 |------|-------------------|---------|
 | [StarBreaker](https://github.com/diogotr7/StarBreaker) | Reads `Data.p4k` and the game database, and exports ships with their loadouts. Its Blender add-on decodes the landing gear and weapon animations. | MIT |
 | [cgf-converter](https://github.com/Markemp/Cryengine-Converter) | Converts single model files, character skeletons and the game's animation files | GPL-2.0 |
-| [Blender](https://www.blender.org) (not included) | The sandbox, the landing gear and weapon switches, and the FBX, USDZ and `.blend` exports | GPL-3.0 |
+| [Blender](https://www.blender.org) (not included) | The sandbox, the landing gear, weapon, VTOL and flight mode switches, and the FBX, USDZ and `.blend` exports | GPL-3.0 |
 | [three.js](https://threejs.org) | The 3D view | MIT |
 
 ## For developers
@@ -168,7 +170,7 @@ The desktop app (`desktop/`, C# and WinUI 3) is a front end. The real work happe
 
 - `installs.py` finds the game and works out which build it is.
 - `catalog.py` builds the search index.
-- `models.py` exports models, and `gear.py` poses landing gear and weapons.
+- `models.py` exports models, and `gear.py` poses landing gear, weapons, folded wings, VTOL and flight mode.
 - `printprep.py` is the print pipeline.
 - `characters.py` and `rig.py` build and pose figures.
 - `server.py` and `web/` are the API and the viewer.

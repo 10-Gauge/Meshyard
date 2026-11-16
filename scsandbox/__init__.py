@@ -1,3 +1,3 @@
 """Offline Star Citizen asset browser, Blender sandbox and 3D-print exporter."""
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"

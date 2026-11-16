@@ -57,6 +57,7 @@ def glb_for(install: Install, settings: dict, asset: dict, variant: str = "previ
                     complete_weapon(out, install, settings, asset, log)
                 place_interiors(out, install, asset, log)
                 reattach_orphans(out, log)
+                fix_tagged_geometry(out, install, settings, log)
                 drop_empty_meshes(out, log)
                 fix_item_meshes(out, log)
             return out
@@ -70,6 +71,7 @@ def glb_for(install: Install, settings: dict, asset: dict, variant: str = "previ
                 if out.exists():
                     place_interiors(out, install, asset, log)
                     reattach_orphans(out, log)
+                    fix_tagged_geometry(out, install, settings, log)
                     drop_empty_meshes(out, log)
                     fix_item_meshes(out, log)
                     return out
@@ -451,6 +453,230 @@ def reattach_orphans(glb: Path, log=print) -> int:
         log(f"couldn't update {glb.name} yet ({e.strerror}); it's repaired next time it's loaded")
         return 0
     return moved
+
+
+# ---------- tagged variant geometry ----------
+# An item's geometry can list variants under SubGeometry, picked by a tag ("Left",
+# "Right"). Crusader copied the Freelancer thruster template for the Starlifter, so its
+# thrusters still carry the Freelancer's left and right engines as tagged variants. The
+# game shows the item's own model; StarBreaker uses the variant instead, so a 10 m
+# Freelancer engine (red and gray) sticks out under the hull and into the cargo bay
+# where each small Crusader VTOL and main thruster should be. Swap the item's own
+# model back in (converted with cgf-converter, which has no UVs: plain material).
+
+TAGGED_VERSION = 1
+# cgf-converter writes glTF Y-up; StarBreaker's items sit in CryEngine Z-up space
+_Y_UP_TO_CRY = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+_PART_MATERIAL = {"name": "thruster_part", "pbrMetallicRoughness": {
+    "baseColorFactor": [0.30, 0.30, 0.32, 1.0], "metallicFactor": 0.6, "roughnessFactor": 0.5}}
+
+
+def _stem(path: str) -> str:
+    return path.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0].lower()
+
+
+def _folder(path: str) -> str:
+    return path.replace("\\", "/").lower().lstrip("/").removeprefix("data/").rsplit("/", 1)[0]
+
+
+def _model(path: str) -> str:
+    """Maker and model from a geometry file name: "crus_starlifter" from CRUS_Starlifter_VTOL_R.cga."""
+    return "_".join(_stem(path).split("_")[:2])
+
+
+def tagged_geometry(record: object) -> tuple[str, set[str]] | None:
+    """(own geometry path, stems of its leftover tagged variants) for an item record, or None.
+
+    StarBreaker picks a tagged variant when the tag ("right") appears in the mount's name.
+    That's right for real left and right parts of the same model (the Arrow's, Hawk's
+    and 350r's thrusters), so only variants of another model in another folder count:
+    geometry left over from the template the item was copied from (the Starlifter's
+    thrusters point at misc_freelancer/, the Carrack's at the 600i's)."""
+    found = []
+
+    def walk(o):
+        if isinstance(o, dict):
+            if o.get("_Type_") == "SGeometryResourceParams":
+                node = o.get("Geometry") or {}
+                own = (((node.get("Geometry") or {}).get("Geometry") or {}).get("path") or "")
+                paths = [((s.get("Geometry") or {}).get("Geometry") or {}).get("path") or ""
+                         for s in node.get("SubGeometry") or [] if (s.get("Tags") or "").strip()]
+                tagged = {_stem(p) for p in paths if p and _folder(p) != _folder(own)
+                          and _model(p) != _model(own)}
+                if own and tagged and _stem(own) not in tagged:
+                    found.append((own, tagged))
+                return
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+
+    walk(record)
+    return found[0] if found else None
+
+
+def _read_glb(path: Path) -> tuple[dict, bytes, int]:
+    data = path.read_bytes()
+    magic, version, _ = struct.unpack_from("<4sII", data, 0)
+    json_len, _ = struct.unpack_from("<II", data, 12)
+    doc = json.loads(data[20:20 + json_len])
+    rest = data[20 + json_len:]
+    bin_ = b""
+    if len(rest) >= 8:
+        blen, _ = struct.unpack_from("<II", rest, 0)
+        bin_ = rest[8:8 + blen]
+    return doc, bin_, version
+
+
+def _write_glb(path: Path, doc: dict, bin_: bytes, version: int = 2) -> None:
+    body = json.dumps(doc, separators=(",", ":")).encode("utf-8")
+    body += b" " * (-len(body) % 4)
+    bin_ += b"\0" * (-len(bin_) % 4)
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "wb") as w:
+        w.write(struct.pack("<4sII", b"glTF", version, 12 + 8 + len(body) + 8 + len(bin_)))
+        w.write(struct.pack("<II", len(body), 0x4E4F534A))
+        w.write(body)
+        w.write(struct.pack("<II", len(bin_), 0x004E4942))
+        w.write(bin_)
+    tmp.replace(path)
+
+
+def graft_part(doc: dict, bin_: bytes, part: dict, part_bin: bytes, material: int) -> tuple[bytes, dict]:
+    """Copy a part GLB's meshes into doc (one shared plain material, skinning dropped).
+    Returns the new binary chunk and the part's root nodes, ready to be instanced with
+    instance_part()."""
+    bin_ += b"\0" * (-len(bin_) % 4)
+    offset = len(bin_)
+    bin_ += part_bin
+    doc.setdefault("buffers", [{}])[0]["byteLength"] = len(bin_)
+    bv0, acc0, mesh0 = len(doc.setdefault("bufferViews", [])), len(doc.setdefault("accessors", [])), \
+        len(doc.setdefault("meshes", []))
+    for bv in part.get("bufferViews", []):
+        doc["bufferViews"].append({**bv, "buffer": 0, "byteOffset": bv.get("byteOffset", 0) + offset})
+    for a in part.get("accessors", []):
+        a = dict(a)
+        if "bufferView" in a:
+            a["bufferView"] += bv0
+        doc["accessors"].append(a)
+    for m in part.get("meshes", []):
+        prims = []
+        for p in m.get("primitives", []):
+            attrs = {k: v + acc0 for k, v in p.get("attributes", {}).items() if not k.startswith(("JOINTS_", "WEIGHTS_"))}
+            q = {"attributes": attrs, "material": material, "mode": p.get("mode", 4)}
+            if "indices" in p:
+                q["indices"] = p["indices"] + acc0
+            prims.append(q)
+        doc["meshes"].append({"name": m.get("name", ""), "primitives": prims})
+    scene = part.get("scenes", [{}])[part.get("scene", 0)]
+    return bin_, {"part": part, "mesh0": mesh0, "roots": scene.get("nodes", [])}
+
+
+def instance_part(doc: dict, grafted: dict, name: str) -> int:
+    """Add a copy of a grafted part's node tree under a new node (Y-up to Z-up); returns it."""
+    part, nodes = grafted["part"], doc["nodes"]
+
+    def copy(i):
+        src = part["nodes"][i]
+        nd = {k: v for k, v in src.items() if k in ("name", "matrix", "translation", "rotation", "scale")}
+        if "mesh" in src:
+            nd["mesh"] = src["mesh"] + grafted["mesh0"]
+        k = len(nodes)
+        nodes.append(nd)
+        kids = [copy(c) for c in src.get("children", [])]
+        if kids:
+            nodes[k]["children"] = kids
+        return k
+
+    wrap = len(nodes)
+    nodes.append({"name": name, "matrix": list(_Y_UP_TO_CRY)})
+    nodes[wrap]["children"] = [copy(r) for r in grafted["roots"]]
+    return wrap
+
+
+def fix_tagged_geometry(glb: Path, install: Install, settings: dict, log=print) -> int:
+    """Replace tagged variant geometry StarBreaker chose over an item's own model (the
+    Starlifter's thrusters were Freelancer engines). Returns items fixed."""
+    mark = glb.with_name(glb.name + ".tagged")
+    stamp = lambda: f"{TAGGED_VERSION}:{glb.stat().st_size}"  # noqa: E731  (a new export is checked again)
+    try:
+        if mark.read_text().strip() == stamp():
+            return 0
+    except OSError:
+        pass
+    doc, bin_, version = _read_glb(glb)
+    nodes = doc.get("nodes", [])
+    swaps = []   # (item node, bad child, own geometry path)
+    records: dict[str, tuple | None] = {}
+    con = None
+    try:
+        for hp in nodes:
+            if not (hp.get("name") or "").lower().startswith("hardpoint_"):
+                continue
+            for it in hp.get("children", []):
+                item = nodes[it].get("name") or ""
+                kids = [(c, (nodes[c].get("name") or "").lower()) for c in nodes[it].get("children", [])]
+                if not item or not kids:
+                    continue
+                if item not in records:
+                    records[item] = None
+                    con = con or catalog.connect(install)
+                    row = con.execute("SELECT record_path FROM assets WHERE record = ? COLLATE NOCASE "
+                                      "AND kind = 'entity'", (item,)).fetchone()
+                    rec = catalog.build_dir(install) / "records" / row[0] if row and row[0] else None
+                    if rec and rec.is_file():
+                        try:
+                            records[item] = tagged_geometry(json.loads(rec.read_text(encoding="utf-8")))
+                        except (OSError, ValueError):
+                            pass
+                tg = records[item]
+                if not tg:
+                    continue
+                for c, cname in kids:
+                    if cname in tg[1]:
+                        swaps.append((it, c, tg[0]))
+    except FileNotFoundError:
+        return 0
+    finally:
+        if con is not None:
+            con.close()
+    fixed = 0
+    if swaps:
+        parts_dir = models_dir(install) / "parts"
+        parts_dir.mkdir(exist_ok=True)
+        doc.setdefault("materials", []).append(dict(_PART_MATERIAL))
+        material = len(doc["materials"]) - 1
+        grafted: dict[str, dict | None] = {}
+        for it, bad, own in swaps:
+            key = _stem(own)
+            if key not in grafted:
+                grafted[key] = None
+                part_glb = parts_dir / f"{_safe(key)}.glb"
+                try:
+                    if not part_glb.exists():
+                        _convert_raw(install, settings, own, part_glb)
+                    part, part_bin, _ = _read_glb(part_glb)
+                    bin_, g = graft_part(doc, bin_, part, part_bin, material)
+                    grafted[key] = g
+                except (tools.ToolError, OSError, ValueError) as e:
+                    if "not found" not in str(e):  # no own model in the game files: the variant is all there is
+                        log(f"couldn't convert {own}: {e}")
+            g = grafted[key]
+            if g is None:
+                continue
+            kids = nodes[it]["children"]
+            kids.remove(bad)
+            kids.append(instance_part(doc, g, key))
+            fixed += 1
+        if fixed:
+            _write_glb(glb, doc, bin_, version)
+            log(f"swapped {fixed} item(s) built from leftover variant geometry back to their own model")
+    try:
+        mark.write_text(stamp())
+    except OSError:
+        pass
+    return fixed
 
 
 def fix_item_meshes(glb: Path, log=print) -> int:

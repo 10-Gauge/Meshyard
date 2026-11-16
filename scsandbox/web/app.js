@@ -208,6 +208,8 @@ function select(a, li) {
   state.thin = null;
   $("gear-row").hidden = a.category !== "spaceships";
   $("weapons-row").hidden = a.category !== "spaceships";
+  $("vtol-row").hidden = a.category !== "spaceships";
+  $("flight-row").hidden = a.category !== "spaceships";
   $("p-thin").hidden = true;
   $("p-thin").innerHTML = "";
   loadModel("preview");
@@ -224,7 +226,9 @@ async function loadModel(variant, spawn = false) {
   try {
     const gear = gearUp() && variant !== "animated" ? "up" : "down";
     const weapons = weaponsOut() && variant !== "animated" ? "out" : "";
-    const { job } = await api("/api/model", { channel: state.channel, id: a.id, variant, spawn, gear, weapons });
+    const vtol = !!vtolOn() && variant !== "animated";
+    const flight = !!flightOn() && variant !== "animated";
+    const { job } = await api("/api/model", { channel: state.channel, id: a.id, variant, spawn, gear, weapons, vtol, flight });
     trackJob(job, (r) => { if (!spawn && state.selected === a) showModel(r.url); },
       (err) => { if (!spawn && state.selected === a) viewerMsg("Export failed: " + err.split("\n").slice(-3).join(" ")); });
   } catch (e) { viewerMsg(e.message); }
@@ -233,6 +237,10 @@ const gearUp = () => $("b-gear").checked && !$("gear-row").hidden && state.selec
 $("b-gear").onchange = () => loadModel(state.variant || "preview");
 const weaponsOut = () => $("b-weapons").checked && !$("weapons-row").hidden && state.selected && !state.selected.figure;
 $("b-weapons").onchange = () => loadModel(state.variant || "preview");
+const vtolOn = () => $("b-vtol").checked && !$("vtol-row").hidden && state.selected && !state.selected.figure;
+$("b-vtol").onchange = () => loadModel(state.variant || "preview");
+const flightOn = () => $("b-flight").checked && !$("flight-row").hidden && state.selected && !state.selected.figure;
+$("b-flight").onchange = () => loadModel(state.variant || "preview");
 $("b-preview").onclick = () => loadModel("preview");
 $("b-full").onclick = () => loadModel("full");
 $("b-spawn").onclick = () => loadModel("full", true);
@@ -380,7 +388,7 @@ $("b-export").onclick = async () => {
 
 // ---------- character builder ----------
 // The print / thin-part / export requests are about an indexed asset or a built figure.
-function target(a) { return a.figure ? { figure: a.figure, label: a.name } : { id: a.id, gear: gearUp() ? "up" : "down", weapons: weaponsOut() ? "out" : "" }; }
+function target(a) { return a.figure ? { figure: a.figure, label: a.name } : { id: a.id, gear: gearUp() ? "up" : "down", weapons: weaponsOut() ? "out" : "", vtol: !!vtolOn(), flight: !!flightOn() }; }
 
 const chars = { on: false, slots: [], picks: {}, loadedBody: null };
 

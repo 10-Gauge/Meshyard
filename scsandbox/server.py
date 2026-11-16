@@ -100,20 +100,21 @@ class App:
         return self.submit(f"Index {inst.channel} {inst.version}", fn)
 
     def job_model(self, channel: str, asset_id: int, variant: str, spawn: bool, gear_up: bool = False,
-                  weapons: str | None = None):
+                  weapons: str | None = None, vtol: bool = False, flight: bool = False):
         inst = self.install(channel)
         asset = catalog.get(self.con(inst), asset_id)
         if not asset:
             raise LookupError("asset not found")
 
         def fn(log):
-            if (gear_up or weapons) and variant != "animated":
-                glb = _posed(inst, self.settings, asset, variant, gear_up, weapons, log)
+            if (gear_up or weapons or vtol or flight or gear.has_landed_shape(inst, asset)) and variant != "animated":
+                glb = _posed(inst, self.settings, asset, variant, gear_up, weapons, log, vtol, flight)
                 if spawn:
                     sandbox.add(asset["record"], asset["name"], glb, inst.channel, inst.build_id)
                     log("queued for the Blender sandbox")
                 return {"url": f"/files/model/{inst.channel}/{inst.build_id}/{quote(glb.name)}",
-                        "path": str(glb), "gear": "up" if gear_up else "down", "weapons": weapons or ""}
+                        "path": str(glb), "gear": "up" if gear_up else "down", "weapons": weapons or "",
+                        "vtol": vtol, "flight": flight}
             if variant == "animated":
                 pkg = models.package_for(inst, self.settings, asset, log=log)
                 if spawn:
@@ -202,9 +203,9 @@ class App:
         asset = catalog.get(self.con(inst), int(b["id"]))
         if not asset:
             raise LookupError("asset not found")
-        gear_up, weapons = b.get("gear") == "up", _weapons(b)
-        if gear_up or weapons:
-            getter = lambda variant, log: _posed(inst, self.settings, asset, variant, gear_up, weapons, log)  # noqa: E731
+        gear_up, weapons, vtol, flight = b.get("gear") == "up", _weapons(b), bool(b.get("vtol")), bool(b.get("flight"))
+        if gear_up or weapons or vtol or flight or gear.has_landed_shape(inst, asset):
+            getter = lambda variant, log: _posed(inst, self.settings, asset, variant, gear_up, weapons, log, vtol, flight)  # noqa: E731
         else:
             getter = lambda variant, log: models.glb_for(inst, self.settings, asset, variant, log=log)  # noqa: E731
         return asset["name"], getter, False, asset.get("manufacturer") or ""
@@ -317,17 +318,21 @@ def _weapons(b: dict) -> str | None:
     return w if w in ("out", "in") else None
 
 
-def _posed(inst, settings, asset, variant, gear_up, weapons, log):
-    """The model with its landing gear up and/or weapons deployed, with plain-language errors."""
+def _posed(inst, settings, asset, variant, gear_up, weapons, log, vtol=False, flight=False):
+    """The model with its landing gear up, weapons deployed and/or VTOL mode, with plain-language errors."""
     try:
-        return gear.posed_glb(inst, settings, asset, variant, gear_up=gear_up, weapons=weapons, log=log)
+        return gear.posed_glb(inst, settings, asset, variant, gear_up=gear_up, weapons=weapons, log=log, vtol=vtol, flight=flight)
     except gear.NoPose as e:
         if e.kind == "gear":
             raise LookupError(f"{asset['name']} can't show its landing gear up: {e}") from e
+        if e.kind == "vtol":
+            raise LookupError(f"{asset['name']} has no VTOL mode ({e}).") from e
+        if e.kind == "flight":
+            raise LookupError(f"{asset['name']} has no flight mode flaps ({e}).") from e
         raise LookupError(f"{asset['name']} has no deployable weapons ({e}).") from e
     except tools.ToolError as e:
         if "blender" in str(e).lower() and "not found" in str(e).lower():
-            raise LookupError("Landing gear up and deployed weapons need Blender (blender.org): they use "
+            raise LookupError("Landing gear up, deployed weapons, folded wings, VTOL and flight mode need Blender (blender.org): they use "
                               "the StarBreaker add-on to read the ship's animations.") from e
         raise
 
@@ -488,7 +493,8 @@ def make_handler(app: App):
                 if p == "/api/model":
                     return self.json({"job": app.job_model(b.get("channel"), int(b["id"]),
                                                            b.get("variant", "preview"), bool(b.get("spawn")),
-                                                           gear_up=b.get("gear") == "up", weapons=_weapons(b))})
+                                                           gear_up=b.get("gear") == "up", weapons=_weapons(b),
+                                                           vtol=bool(b.get("vtol")), flight=bool(b.get("flight")))})
                 if p == "/api/character/build":
                     return self.json({"job": app.job_character(b.get("channel"), b)})
                 if p == "/api/print":
