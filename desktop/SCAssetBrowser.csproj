@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    SC Asset Browser for Windows: a WinUI 3 front end over the Python engine.
+    Build:   packaging\build_exe.ps1  (builds the engine, then publishes this as one exe)
+    Dev run: dotnet run -c Debug      (uses the repo's .venv engine, see Services/Engine.cs)
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>SCAssetBrowser</RootNamespace>
+    <AssemblyName>SCAssetBrowser</AssemblyName>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64</Platforms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.0.0</Version>
+    <Product>SC Asset Browser</Product>
+    <AssemblyTitle>SC Asset Browser</AssemblyTitle>
+    <!-- The packaged engine (PyInstaller exe) to embed; build_exe.ps1 passes it. -->
+    <EngineExe Condition="'$(EngineExe)' == ''">$(MSBuildThisFileDirectory)..\build\engine\sc-engine.exe</EngineExe>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- WinUI loads its compiled XAML (resources.pri) from disk, so the bundle unpacks it -->
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <!-- found under any exe name (the download is SC-Asset-Browser.exe) -->
+    <ProjectPriFileName>resources.pri</ProjectPriFileName>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\app.ico" LogicalName="app.ico" />
+    <EmbeddedResource Include="$(EngineExe)" LogicalName="sc-engine.exe" Condition="'$(Configuration)' == 'Release' And Exists('$(EngineExe)')" />
+    <EmbeddedResource Include="Assets\app-256.png" LogicalName="app-256.png" />
+  </ItemGroup>
+</Project>
