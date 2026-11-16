@@ -162,7 +162,10 @@
                                  PlaceholderText="Ship's own name, a motto, a date…" />
                         <ComboBox x:Name="LogoBox" Header="Embossed logo" HorizontalAlignment="Stretch"
                                   ToolTipService.ToolTip="The manufacturer's logo from the game, raised on the plate beside the text" />
+                        <ToggleSwitch x:Name="ScaleSwitch" Header="Scale on the plate" OffContent="Off" OnContent="On, like 1:85"
+                                      ToolTipService.ToolTip="Adds the print scale to the plate's second line" />
 
+                        <TextBlock x:Name="LastPrintText" Style="{StaticResource Secondary}" TextWrapping="Wrap" Visibility="Collapsed" />
                         <Button x:Name="PrintButton" AutomationProperties.Name="Export printable file" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch"
                                 Margin="0,8,0,0" Click="Print_Click">
                             <StackPanel Orientation="Horizontal" Spacing="8">
@@ -175,6 +178,8 @@
                             <TextBlock x:Name="PrintBusyText" Style="{StaticResource Secondary}" />
                         </StackPanel>
                         <InfoBar x:Name="PrintResult" IsClosable="True" />
+                        <HyperlinkButton Content="Print history…" Padding="0" Click="History_Click"
+                                         ToolTipService.ToolTip="Everything you've exported for printing, with the scale of each" />
                     </StackPanel>
                 </Expander>
 

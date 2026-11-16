@@ -99,6 +99,7 @@ class PrintOptions:
     stand_shape: str = "round"      # round | rect (rectangular base with a text plate)
     stand_text: str = ""            # raised text on the rect base's front strip
     stand_text2: str = ""           # optional second, smaller line under it
+    stand_scale: bool = False       # add the print scale (1:85) to the plate's second line
     stand_logo: str = ""            # PNG mask of a logo embossed beside the text
     figure: bool = False            # character figure: the stand goes under its feet
 
@@ -1016,6 +1017,11 @@ def prepare(glb: Path, out: Path, opts: PrintOptions, log=print) -> dict:
     parts = load_parts(glb, opts.exclude_nodes)
     log(f"  {len(parts)} parts loaded")
     scale = _orient_and_scale(parts, opts.size_mm, opts.tilt_deg)
+    if opts.stand_scale and opts.stand != "none" and opts.stand_shape == "rect":
+        # the scale goes on the plate's second line, after any text already there
+        import dataclasses
+        line2 = "   ".join(t for t in (opts.stand_text2.strip(), _scale_text(scale)) if t)
+        opts = dataclasses.replace(opts, stand_text2=line2)
     parts = apply_overrides(parts, opts, log)
     report = {"source": str(glb), "mode": opts.mode, "scale": _scale_text(scale),
               "min_feature_mm": round(min_mm, 2), "stand": opts.stand}

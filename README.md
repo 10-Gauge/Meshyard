@@ -57,12 +57,14 @@ Pick a size (**Longest side**, in millimeters) and click **Export printable file
 Some other options worth knowing:
 
 - **Stand.** *Separate stand, pegs into a socket* prints a base and post, and cuts a matching socket under the model so you can print the ship flat and press it on. The other option fuses the stand to the model.
-- **Base.** *Round*, or *Rectangle with name plate*. The name plate has a sloped front with raised lettering: the ship name, an optional smaller second line (a ship's own name, a motto, a date), and the manufacturer's logo embossed beside the text.
+- **Base.** *Round*, or *Rectangle with name plate*. The name plate has a sloped front with raised lettering: the ship name, an optional smaller second line (a ship's own name, a motto, a date), and the manufacturer's logo embossed beside the text. Turn on **Scale on the plate** to add the print scale too, like 1:85.
 - **Display angle** tilts the model nose up. The socket still comes out full depth when it's tilted.
 - **Hollow walls** for resin prints. Remember to add drain holes in your slicer.
 - **Separate parts (kit)** gives you every part as its own body instead of one solid, for painting or building it up like a model kit.
 
 Finished files go to `%LOCALAPPDATA%\sc-sandbox\exports`, and **Show in folder** takes you straight there.
+
+Every print export is also written to a log (`print-log.csv` in the same folder), so you can always look up what scale you printed something at. The print panel shows when you last printed the selected item and at what scale, and **Print history…** lists everything. From the command line it's `sc-sandbox prints`.
 
 ### Exporting models
 

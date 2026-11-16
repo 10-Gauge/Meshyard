@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import __version__, catalog, config, exporters, installs, models, printprep, tools
+from . import __version__, catalog, config, exporters, installs, models, printlog, printprep, tools
 
 
 def cmd_installs(a, s):
@@ -114,17 +114,22 @@ def cmd_print(a, s):
     inst = installs.pick(a.channel, s)
     if a.glb:
         glb, stem = Path(a.asset), Path(a.asset).stem
+        key = str(Path(a.asset).resolve())
     else:
         asset = _find_asset(catalog.connect(inst), a.asset)
         print(f"Exporting {asset['name']} from {inst.channel} {inst.version}")
         glb = models.glb_for(inst, s, asset, "print")
         stem = asset["name"]
+        key = asset["record"]
     overrides = {n: {"action": "remove"} for n in a.remove}
     overrides.update({n: {"action": "thicken", "mm": float(mm)} for n, mm in (t.rsplit("=", 1) for t in a.thicken_part)})
     opts = printprep.PrintOptions.from_settings(
         s, size_mm=a.size, mode=a.mode, voxel_mm=a.voxel, format=a.format, nozzle_mm=a.nozzle,
         min_feature_nozzles=a.min_nozzles, thicken=False if a.no_thicken else None, hollow_mm=a.hollow,
-        tilt_deg=a.tilt, stand=a.stand, stand_height_mm=a.stand_height, part_overrides=overrides or None)
+        tilt_deg=a.tilt, stand=a.stand, stand_height_mm=a.stand_height, part_overrides=overrides or None,
+        stand_shape="rect" if (a.plate is not None or a.plate_scale) else None,
+        stand_text=a.plate if a.plate is not None else (stem if a.plate_scale else None),
+        stand_text2=a.plate2, stand_scale=True if a.plate_scale else None)
     if a.list_thin:
         info = printprep.analyze(glb, opts)
         for d in info["slender"]:
@@ -134,7 +139,20 @@ def cmd_print(a, s):
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in stem).strip("_")
     out = Path(a.out) if a.out else config.home() / "exports" / f"{safe}_{int(opts.size_mm)}mm_{opts.mode}"
     rep = printprep.prepare(glb, out, opts)
+    printlog.add(stem, key, opts, rep)
     print(json.dumps(rep, indent=2))
+
+
+def cmd_prints(a, s):
+    rows = printlog.entries(limit=a.last)
+    if a.q:
+        rows = [r for r in rows if a.q.lower() in (r["name"] + r["key"]).lower()]
+    if not rows:
+        print(f"No print exports logged yet ({printlog.path()})")
+        return
+    for r in rows:
+        print(f"{r['date']}  {r['scale']:>7}  {r['longest_side_mm']:>5} mm  {r['name']}")
+    print(f"-- {printlog.path()}")
 
 
 def cmd_export(a, s):
@@ -230,8 +248,16 @@ def main(argv=None):
     pr.add_argument("--stand", choices=["none", "peg", "attached"])
     pr.add_argument("--stand-height", type=float, help="mm between stand base and model")
     pr.add_argument("--tilt", type=float, help="display angle in degrees")
+    pr.add_argument("--plate", help="name plate text (rectangular base with a plate)")
+    pr.add_argument("--plate2", help="smaller second line on the plate")
+    pr.add_argument("--plate-scale", action="store_true", help="put the print scale (1:85) on the plate")
     pr.add_argument("--out")
     pr.set_defaults(fn=cmd_print)
+
+    pl = sub.add_parser("prints", help="list past print exports and the scale each was printed at")
+    pl.add_argument("q", nargs="?", help="only names containing this")
+    pl.add_argument("--last", type=int, default=50)
+    pl.set_defaults(fn=cmd_prints)
 
     ex = sub.add_parser("export", help="export an asset as GLB, glTF, OBJ, FBX, DAE, USDZ, PLY, STL or 3MF")
     channel_args(ex)
