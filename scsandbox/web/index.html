@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SC Asset Browser</title>
+<link rel="stylesheet" href="/static/style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "/static/vendor/three/build/three.module.js",
+  "three/addons/": "/static/vendor/three/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header>
+  <h1>SC Asset Browser</h1>
+  <label>Install
+    <select id="channel"></select>
+  </label>
+  <span id="build" class="muted"></span>
+  <button id="reindex" title="Re-read the selected install (run after each patch)">Update index</button>
+  <span id="toolwarn" class="warn"></span>
+  <button id="tools-dl" hidden title="Download StarBreaker and cgf-converter, which read the game files">Download tools</button>
+  <span class="spacer"></span>
+  <button id="b-chars" title="Assemble a character from armour and clothing pieces, to preview and print">Character builder</button>
+  <button id="b-blender" title="Install the Blender add-ons and open the sandbox scene (needs Blender installed)">Open Blender sandbox</button>
+</header>
+
+<main>
+  <nav id="cats"></nav>
+
+  <section id="list">
+    <div class="searchbar">
+      <input id="q" type="search" placeholder="Search ships, vehicles, weapons, props…" autocomplete="off">
+      <label class="chk"><input id="rawgeo" type="checkbox"> raw geometry files</label>
+    </div>
+    <div id="count" class="muted"></div>
+    <ul id="results"></ul>
+    <button id="more" hidden>Load more</button>
+    <div id="empty" class="empty" hidden><div id="empty-text"></div><div id="empty-actions"></div></div>
+    <div id="charpanel" hidden>
+      <h3>Character builder</h3>
+      <p class="muted">Pick a body, what it wears, a pose and a weapon, then build it.</p>
+      <div class="charrow"><label>Body <select id="c-body"><option value="male">Male</option><option value="female">Female</option></select></label></div>
+      <div class="charrow"><label>Head <select id="c-head"><option value="">(none)</option></select></label></div>
+      <div class="charrow"><label>Pose <select id="c-pose"><option value="">A-pose (as exported)</option></select></label></div>
+      <div class="cslot" id="c-weaponrow"><label>Weapon</label><input id="c-wq" type="search" placeholder="Filter…"><select id="c-weapon"><option value="">(none)</option></select></div>
+      <div id="c-slots"></div>
+      <div class="charrow">
+        <button id="c-build" class="primary">Build character</button>
+        <button id="c-clear" type="button">Clear</button>
+      </div>
+      <div id="c-status" class="muted"></div>
+    </div>
+  </section>
+
+  <section id="detail">
+    <div id="viewer"><div id="viewer-msg" class="muted">Pick an asset to preview it</div></div>
+    <div id="info" hidden>
+      <h2 id="d-name"></h2>
+      <div id="d-meta" class="muted"></div>
+      <p id="d-desc"></p>
+      <div class="actions">
+        <button id="b-preview">Preview</button>
+        <button id="b-full">Full detail</button>
+        <button id="b-spawn" title="Export and queue it for the Blender sandbox">Spawn in sandbox</button>
+        <button id="b-spawn-anim" title="Spawn with landing gear, door and ramp animations (controls are in Blender's StarBreaker tab)">Spawn animated</button>
+        <label class="chk" id="gear-row" title="Show and print the ship with its landing gear retracted and the gear doors closed (needs Blender)"><input id="b-gear" type="checkbox"> Landing gear up</label>
+        <label class="chk" id="weapons-row" title="Show and print the ship with its deployable guns and missile racks out (Alpha Wolf, M80, ...; needs Blender)"><input id="b-weapons" type="checkbox"> Weapons deployed</label>
+      </div>
+      <fieldset class="print">
+        <legend>3D print export</legend>
+        <label>Longest side <input id="p-size" type="number" min="10" max="2000" step="5"> mm</label>
+        <label>Body
+          <select id="p-mode">
+            <option value="solid">One solid piece (watertight)</option>
+            <option value="parts">Separate parts (kit)</option>
+          </select>
+        </label>
+        <label>Format
+          <select id="p-format"><option value="3mf">3MF</option><option value="stl">STL</option><option value="obj">OBJ</option><option value="ply">PLY</option></select>
+        </label>
+        <label title="Resolution of the solid remesh: 0.1 suits resin, 0.2-0.4 suits FDM">Detail <input id="p-voxel" type="number" min="0.05" max="2" step="0.05"> mm</label>
+
+        <h4 class="span">Strength</h4>
+        <label class="chk span"><input id="p-thicken" type="checkbox"> Thicken thin parts (antennas, gun barrels, fins) so they print and survive coming off the plate</label>
+        <label>Nozzle <input id="p-nozzle" type="number" min="0.1" max="1.2" step="0.05"> mm</label>
+        <label>At least <input id="p-minn" type="number" min="1" max="10" step="0.5"> nozzle widths <span id="p-minmm" class="muted"></span></label>
+        <div class="span row">
+          <button id="b-thin" type="button">Find thin parts…</button>
+          <span class="muted">Choose which ones to make thicker or remove</span>
+        </div>
+        <div id="p-thin" class="span" hidden></div>
+
+        <h4 class="span">Display</h4>
+        <label>Stand
+          <select id="p-stand">
+            <option value="none">No stand</option>
+            <option value="peg">Separate stand, peg fits a socket in the model</option>
+            <option value="attached">Stand printed as part of the model</option>
+          </select>
+        </label>
+        <label>Base
+          <select id="p-standshape">
+            <option value="round">Round</option>
+            <option value="rect">Rectangle with name plate</option>
+          </select>
+        </label>
+        <label title="Raised lettering on the front strip of the rectangular base">Plate text <input id="p-standtext" type="text" maxlength="60" placeholder="Ship name"></label>
+        <label title="Optional smaller line under the plate text">Second line <input id="p-standtext2" type="text" maxlength="60" placeholder="optional"></label>
+        <label title="The manufacturer's logo from the game, raised beside the text">Logo
+          <select id="p-logo"><option value="auto">The manufacturer's logo</option><option value="">No logo</option></select>
+        </label>
+        <label>Stand height <input id="p-standh" type="number" min="5" max="300" step="5"> mm</label>
+        <label title="Tilts the model nose up (negative tilts it down)">Display angle <input id="p-tilt" type="number" min="-45" max="45" step="5"> °</label>
+        <label title="For resin: leaves walls this thick and saves resin. 0 keeps it solid.">Hollow walls <input id="p-hollow" type="number" min="0" max="10" step="0.5"> mm</label>
+
+        <button id="b-print" class="primary">Export printable file</button>
+        <div id="p-result"></div>
+      </fieldset>
+      <fieldset class="print">
+        <legend>Export 3D model</legend>
+        <label>Format <select id="m-format"></select></label>
+        <label class="chk"><input id="m-tex" type="checkbox" checked> Textures and materials</label>
+        <button id="b-export">Export model</button>
+        <div id="m-result" class="result"></div>
+      </fieldset>
+    </div>
+  </section>
+</main>
+
+<div id="jobs"></div>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>
