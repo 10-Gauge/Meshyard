@@ -1,8 +1,8 @@
-"""Blender (background) script: pose a StarBreaker package with its landing gear up, or
-its deployable weapons out or stowed, and write how every moved object's world
-transform changed.
+"""Blender (background) script: pose a StarBreaker package with its landing gear up, its
+deployable weapons out or stowed, its landed shape (wings folded) or its VTOL mode, and
+write how every moved object's world transform changed.
 
-    blender -b <package>/scene.blend --python gear_pose.py -- out.json [gear|weapons_out|weapons_in]
+    blender -b <package>/scene.blend --python gear_pose.py -- out.json [gear|weapons_out|weapons_in|landed|vtol]
 
 Uses the StarBreaker add-on's own animation code (the same call as its "snap" buttons).
 Gear up: "retract" clips snap to their last frame, "deploy"/"extend" clips to their
@@ -44,16 +44,55 @@ try:
     names = po.available_package_animation_names(package)
     result["available"] = names
     plan = []
-    if kind == "gear":
-        gear = re.compile(r"(?i)(landing_?gears?|(^|_)lg_|gear)")
+    gear = re.compile(r"(?i)(landing_?gears?|(^|_)lg_|gear)")
+
+    def gear_plan(up):
+        out = []
         for n in names:
             low = n.lower()
-            if not gear.search(low) or "compress" in low or "idle" in low:
+            if not gear.search(low) or "compress" in low or "idle" in low or "wing" in low or "vtol" in low:
                 continue
             if "retract" in low:
-                plan.append((n, "snap_last"))
+                out.append((n, "snap_last" if up else "snap_first"))
             elif "deploy" in low or "extend" in low:
+                out.append((n, "snap_first" if up else "snap_last"))
+        return out
+
+    if kind == "gear":
+        plan = gear_plan(True)
+    elif kind == "landed":
+        # The shape a ship takes on the ground besides its gear: the Stingray folds its
+        # wingtips down into struts ("krig_s65_wing_retract"), the Guardian moves its wings
+        # with the gear ("landing_gear_wings_deploy"), the Fury, Pitbull and Aurora Mk II
+        # spread theirs for flight ("wings_deploy"), the Eclipse folds its wingtips up in
+        # a clip named "aegs_eclipse_gun_bay".
+        for n in names:
+            low = n.lower()
+            if "vtol" in low or "nacelle" in low:
+                continue
+            if re.search(r"landing_?gear_wings?_(deploy|extend|open)", low):
+                plan.append((n, "snap_last"))
+            elif re.search(r"landing_?gear_wings?_(retract|close)", low):
                 plan.append((n, "snap_first"))
+            elif re.search(r"(^|_)wings?_(retract|fold|close)", low):
+                plan.append((n, "snap_last"))
+            elif re.search(r"(^|_)wings?_(deploy|extend|unfold|open)", low):
+                plan.append((n, "snap_first"))
+            elif re.search(r"^fragment:0:aegs_eclipse_gun_bay$", low):
+                plan.append((n, "snap_last"))
+    elif kind == "vtol":
+        # thrusters that swing down for vertical flight: "nacelles_deploy" (Starlifter, Golem,
+        # RAFT), "vtol_deploy" (Paladin, Hull B, Asgard, Fury), "nacelles_open" (Starlancer),
+        # "vtol_mode_deploy" (Prowler Utility); not the gear's own VTOL variants ("lg_pl_vtol")
+        for n in names:
+            low = n.lower()
+            if re.search(r"(^|_|:)lg_|nozzle|flare|compress|idle", low):
+                continue
+            m = re.search(r"(vtol|nacelles?)(_mode)?(_(deploy|open|extend|retract|close))?$", low)
+            if not m:
+                continue
+            closing = (m.group(4) or "deploy") in ("retract", "close")
+            plan.append((n, "snap_first" if closing else "snap_last"))
     else:
         # "cannons_deploy" (Alpha Wolf), "weapons_deploy" and "Missile_deploy" (M80),
         # "guns_retract", "turret_deploy", ...
@@ -84,6 +123,27 @@ try:
             except Exception:
                 pass
         po._restore_bind_pose(root)
+
+    def most_moved(clips):
+        best = 0
+        for n, mode in clips:
+            reset()
+            try:
+                po.apply_animation_mode_to_package_root(bpy.context, root, n, mode)
+                best = max(best, len(moved_now()))
+                po.apply_animation_mode_to_package_root(bpy.context, root, n, "none")
+            except Exception:
+                pass
+        reset()
+        return best
+
+    if kind == "landed" and plan:
+        # Most ships are exported gear down. A few (the Stingray) come gear up: their
+        # landed shape puts the gear down as well.
+        up, down = most_moved(gear_plan(True)), most_moved(gear_plan(False))
+        if down > 20 and up * 4 < down:
+            plan += gear_plan(False)
+            result["gear_down"] = True
 
     # Clips overlap (a retract, and extend fragments that also carry the doors), and
     # applying one after another lets a later clip undo an earlier one. Try each alone,

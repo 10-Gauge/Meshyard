@@ -62,7 +62,7 @@
                 </Grid>
 
                 <Grid x:Name="GearRow" ColumnSpacing="12" Margin="2,0,0,0"
-                      ToolTipService.ToolTip="Show and print the ship with its landing gear retracted and the gear doors closed">
+                      ToolTipService.ToolTip="Show and print the ship with its landing gear retracted and the gear doors closed. Ships that fold their wings on the ground (Eclipse, Stingray) show them folded with the gear down once the gear has been raised once.">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -81,6 +81,17 @@
                     <FontIcon Glyph="&#xE7C1;" FontSize="16" VerticalAlignment="Center" />
                     <ToggleSwitch x:Name="WeaponsSwitch" Grid.Column="1" Header="Weapons" OffContent="Stowed" OnContent="Deployed"
                                   Toggled="Gear_Toggled" AutomationProperties.Name="Weapons deployed" />
+                </Grid>
+
+                <Grid x:Name="VtolRow" ColumnSpacing="12" Margin="2,0,0,0"
+                      ToolTipService.ToolTip="Show and print the ship with its thrusters swung down for vertical flight (Starlifter, Paladin, Golem and others)">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE74B;" FontSize="16" VerticalAlignment="Center" />
+                    <ToggleSwitch x:Name="VtolSwitch" Grid.Column="1" Header="VTOL mode" OffContent="Off" OnContent="On"
+                                  Toggled="Gear_Toggled" AutomationProperties.Name="VTOL mode" />
                 </Grid>
 
                 <!-- 3D print -->
