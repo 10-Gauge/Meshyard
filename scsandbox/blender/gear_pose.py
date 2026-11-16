@@ -20,6 +20,10 @@ import sys
 import addon_utils
 import bpy
 
+# Ships whose "wings_deploy" ends (and "wings_retract" starts) in their landed shape (the export's pose), not their
+# flight shape: the Reliant lands with its wings flat and flies with them upright.
+LANDING_WINGS = re.compile(r"(reliant|corsair)_wings?_(deploy|retract)")
+
 args = sys.argv[sys.argv.index("--") + 1:]
 out_path = args[0]
 kind = args[1] if len(args) > 1 else "gear"
@@ -68,7 +72,7 @@ try:
         # a clip named "aegs_eclipse_gun_bay".
         for n in names:
             low = n.lower()
-            if "vtol" in low or "nacelle" in low:
+            if "vtol" in low or "nacelle" in low or LANDING_WINGS.search(low):
                 continue
             if re.search(r"landing_?gear_wings?_(deploy|extend|open)", low):
                 plan.append((n, "snap_last"))
@@ -81,11 +85,16 @@ try:
             elif re.search(r"^fragment:0:aegs_eclipse_gun_bay$", low):
                 plan.append((n, "snap_last"))
     elif kind == "flight":
-        # flight mode: flaps open (the Stingray's "flap_deploy", and its "fap_retract")
+        # flight mode: flaps open (the Stingray's "flap_deploy", and its "fap_retract"), or
+        # the wings of ships exported in their landed shape: the Reliant's stand upright,
+        # the Corsair's spread
         for n in names:
-            m = re.search(r"(^|_|:)(flaps?|faps?)_(deploy|open|extend|retract|close)$", n.lower())
+            low = n.lower()
+            m = re.search(r"(^|_|:)(flaps?|faps?)_(deploy|open|extend|retract|close)$", low)
             if m:
                 plan.append((n, "snap_first" if m.group(3) in ("retract", "close") else "snap_last"))
+            elif LANDING_WINGS.search(low):
+                plan.append((n, "snap_first"))
     elif kind == "vtol":
         # thrusters that swing down for vertical flight: "nacelles_deploy" (Starlifter, Golem,
         # RAFT), "vtol_deploy" (Paladin, Hull B, Asgard, Fury), "nacelles_open" (Starlancer),

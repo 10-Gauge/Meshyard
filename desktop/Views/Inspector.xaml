@@ -62,7 +62,7 @@
                 </Grid>
 
                 <Grid x:Name="GearRow" ColumnSpacing="12" Margin="2,0,0,0"
-                      ToolTipService.ToolTip="Show and print the ship with its landing gear retracted and the gear doors closed. Ships that fold their wings on the ground (Eclipse, Stingray) show them folded with the gear down once the gear has been raised once.">
+                      ToolTipService.ToolTip="Show and print the ship with its landing gear retracted and the gear doors closed. Ships that change shape on the ground (Eclipse, Stingray, Mole, Clipper and more) show them folded with the gear down once the gear has been raised once.">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -95,13 +95,13 @@
                 </Grid>
 
                 <Grid x:Name="FlightRow" ColumnSpacing="12" Margin="2,0,0,0"
-                      ToolTipService.ToolTip="Show and print the ship in flight mode, flaps open (Stingray)">
+                      ToolTipService.ToolTip="Show and print the ship in flight mode: the Stingray opens its flaps, the Reliant stands its wings upright, the Corsair spreads them">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <FontIcon Glyph="&#xE709;" FontSize="16" VerticalAlignment="Center" />
-                    <ToggleSwitch x:Name="FlightSwitch" Grid.Column="1" Header="Flight mode" OffContent="Off" OnContent="Flaps open"
+                    <ToggleSwitch x:Name="FlightSwitch" Grid.Column="1" Header="Flight mode" OffContent="Off" OnContent="On"
                                   Toggled="Gear_Toggled" AutomationProperties.Name="Flight mode" />
                 </Grid>
 
