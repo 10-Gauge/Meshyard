@@ -21,7 +21,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Product>SC Asset Browser</Product>
     <AssemblyTitle>SC Asset Browser</AssemblyTitle>
     <!-- The packaged engine (PyInstaller exe) to embed; build_exe.ps1 passes it. -->
