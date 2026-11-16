@@ -8,7 +8,7 @@ It runs on your own PC against your own copy of the game. It only ever reads `Da
 
 ## Getting started
 
-Grab **[SC-Asset-Browser.exe](https://github.com/10-Gauge/Star-Citizen-Asset-Browser/releases/latest/download/SC-Asset-Browser.exe)** and double-click it. There's no installer. It's around 200 MB, and the tools it uses to read the game files come inside it.
+Grab **[SC-Asset-Browser.exe](https://github.com/10-Gauge/SC-Asset-Browser/releases/latest/download/SC-Asset-Browser.exe)** and double-click it. There's no installer. It's around 200 MB, and the tools it uses to read the game files come inside it.
 
 The one thing it doesn't bring along is [Blender](https://www.blender.org/download/). Browsing, previews, 3D printing and most exports work fine without it. You only need it for the landing gear and weapon switches, for FBX, USDZ and `.blend` export, and for the sandbox. It's free. If the app can't find Blender, it tells you on first launch and gives you a download link. After that a note stays at the top of the window, with a **Check again** button for once you've installed it.
 
@@ -130,8 +130,8 @@ The app stands on the shoulders of some excellent free tools. StarBreaker and cg
 Clone the repo and run the setup script. You'll need Python 3.10 or newer.
 
 ```powershell
-git clone https://github.com/10-Gauge/Star-Citizen-Asset-Browser
-cd Star-Citizen-Asset-Browser
+git clone https://github.com/10-Gauge/SC-Asset-Browser
+cd SC-Asset-Browser
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
