@@ -230,9 +230,9 @@ class App:
             po = printprep.PrintOptions.from_settings(self.settings, **o)
             log("exporting untextured full-detail model")
             glb = glb_for("print", log)
-            log(f"converting ({po.mode}, {po.size_mm:g} mm)")
+            log(f"converting ({po.mode}, " + (f"1:{po.scale:g}" if po.scale > 0 else f"{po.size_mm:g} mm") + ")")
             stem = re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_") or "model"
-            out = config.home() / "exports" / f"{stem}_{int(po.size_mm)}mm_{po.mode}"
+            out = config.home() / "exports" / f"{stem}_{printprep.file_tag(po)}_{po.mode}"
             rep = printprep.prepare(glb, out, po, log=log)
             try:
                 printlog.add(name, key, po, rep)
@@ -254,6 +254,32 @@ class App:
             log("measuring parts at print size")
             return printprep.analyze(glb, po)
         return self.submit(f"Find thin parts: {name}", fn)
+
+    def job_measure(self, channel: str, b: dict):
+        """The model's real size in meters, for turning a scale into a print size and back.
+        Measures the model the viewer already has; the answer is kept beside the file."""
+        inst = self.install(channel)
+        name, glb_for, _, _ = self._target(inst, b)
+        exclude = printprep.PrintOptions.from_settings(self.settings).exclude_nodes
+        variant = b.get("variant") if b.get("variant") in ("preview", "full") else "preview"
+
+        def fn(log):
+            glb = Path(glb_for(variant, log))
+            cache = glb.with_name(glb.stem + ".size.json")
+            stamp = glb.stat().st_mtime
+            try:
+                c = json.loads(cache.read_text())
+                if c.get("mtime") == stamp:
+                    return c["size"]
+            except (OSError, ValueError, KeyError):
+                pass
+            size = printprep.measure(glb, exclude)
+            try:
+                cache.write_text(json.dumps({"mtime": stamp, "size": size}))
+            except OSError:
+                pass
+            return size
+        return self.submit(f"Measure {name}", fn)
 
     def job_export_model(self, channel: str, b: dict, fmt: str, textures: bool):
         inst = self.install(channel)
@@ -306,7 +332,7 @@ def _posed(inst, settings, asset, variant, gear_up, weapons, log):
         raise
 
 
-PRINT_OPTS = {"size_mm": float, "mode": str, "voxel_mm": float, "format": str, "nozzle_mm": float,
+PRINT_OPTS = {"size_mm": float, "scale": float, "mode": str, "voxel_mm": float, "format": str, "nozzle_mm": float,
               "min_feature_nozzles": float, "thicken": bool, "hollow_mm": float, "tilt_deg": float,
               "stand": str, "stand_height_mm": float, "part_overrides": dict,
               "stand_shape": str, "stand_text": lambda v: str(v)[:60], "stand_text2": lambda v: str(v)[:60],
@@ -467,6 +493,8 @@ def make_handler(app: App):
                     return self.json({"job": app.job_character(b.get("channel"), b)})
                 if p == "/api/print":
                     return self.json({"job": app.job_print(b.get("channel"), b, print_opts(b))})
+                if p == "/api/print/measure":
+                    return self.json({"job": app.job_measure(b.get("channel"), b)})
                 if p == "/api/print/analyze":
                     return self.json({"job": app.job_analyze(b.get("channel"), b, print_opts(b))})
                 if p == "/api/export":

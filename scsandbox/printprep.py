@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
@@ -79,6 +79,7 @@ OVERLAY_MATERIAL = re.compile(r"(?i)(pom|decal|glow|rtt_|emissive)")
 @dataclass
 class PrintOptions:
     size_mm: float = 150.0
+    scale: float = 0.0              # N of a 1:N scale; when set it wins over size_mm
     mode: str = "solid"
     voxel_mm: float = 0.2
     max_voxels: int = 250_000_000
@@ -199,7 +200,16 @@ def _material(scene, node: str) -> str:
     return (getattr(getattr(getattr(geom, "visual", None), "material", None), "name", None) or "").lower()
 
 
-def _orient_and_scale(parts, size_mm: float, tilt_deg: float = 0.0) -> float:
+def real_size(parts) -> list[float]:
+    """The model's own size in game meters, Z-up: length/width along X and Y, height on Z."""
+    lo, hi = _bounds(parts)
+    ex = hi - lo
+    return [float(ex[0]), float(ex[2]), float(ex[1])]  # Y-up input
+
+
+def _orient_and_scale(parts, size_mm: float, tilt_deg: float = 0.0, ratio: float = 0.0) -> float:
+    """Turn the model Z-up and size it. ratio is the N of a 1:N scale; without one the
+    longest side becomes size_mm. Returns the scale in mm per game meter."""
     for _, m in parts:
         m.apply_transform(Y_UP_TO_Z_UP)
     lo, hi = _bounds(parts)
@@ -215,7 +225,7 @@ def _orient_and_scale(parts, size_mm: float, tilt_deg: float = 0.0) -> float:
     extent = float(np.max(hi - lo))
     if extent <= 0:
         raise ValueError("Model has zero size")
-    scale = size_mm / extent
+    scale = 1000.0 / ratio if ratio > 0 else size_mm / extent
     for _, m in parts:
         m.apply_scale(scale)
     return scale
@@ -271,9 +281,11 @@ def slender_parts(parts, min_mm: float, limit: int = 60) -> list[dict]:
 def analyze(glb: Path, opts: PrintOptions) -> dict:
     """What the print would look like before running it: size, scale and the slender parts."""
     parts = load_parts(Path(glb), opts.exclude_nodes)
-    scale = _orient_and_scale(parts, opts.size_mm, opts.tilt_deg)
+    real = real_size(parts)
+    scale = _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale)
     lo, hi = _bounds(parts)
     return {"parts": len(parts), "scale": _scale_text(scale), "size_mm": [round(float(x), 1) for x in hi - lo],
+            "real_m": [round(x, 2) for x in real],
             "min_feature_mm": round(opts.min_feature_mm, 2), "slender": slender_parts(parts, opts.min_feature_mm)}
 
 
@@ -294,6 +306,19 @@ def apply_overrides(parts, opts: PrintOptions, log=print):
     if not kept:
         raise ValueError("Every part was removed")
     return kept
+
+
+def measure(glb: Path, exclude: list[str]) -> dict:
+    """The model's real size in game meters (the parts a print would keep)."""
+    real = real_size(load_parts(Path(glb), exclude))
+    return {"real_m": [round(x, 3) for x in real], "longest_m": round(max(real), 3)}
+
+
+def file_tag(opts: PrintOptions) -> str:
+    """The size part of an export's file name: 1-500 for a scale, 150mm for a size."""
+    if opts.scale > 0:
+        return "1-" + f"{round(opts.scale, 1):g}".replace(".", "_")
+    return f"{int(opts.size_mm)}mm"
 
 
 def _scale_text(scale: float) -> str:
@@ -1016,14 +1041,19 @@ def prepare(glb: Path, out: Path, opts: PrintOptions, log=print) -> dict:
 
     parts = load_parts(glb, opts.exclude_nodes)
     log(f"  {len(parts)} parts loaded")
-    scale = _orient_and_scale(parts, opts.size_mm, opts.tilt_deg)
+    real = real_size(parts)
+    scale = _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale)
+    if opts.scale > 0:  # stand and peg sizes follow the printed size
+        lo, hi = _bounds(parts)
+        opts = replace(opts, size_mm=float(np.max(hi - lo)))
+        log(f"  1:{round(opts.scale, 1):g} makes the longest side {opts.size_mm:.0f} mm")
     if opts.stand_scale and opts.stand != "none" and opts.stand_shape == "rect":
         # the scale goes on the plate's second line, after any text already there
-        import dataclasses
         line2 = "   ".join(t for t in (opts.stand_text2.strip(), _scale_text(scale)) if t)
-        opts = dataclasses.replace(opts, stand_text2=line2)
+        opts = replace(opts, stand_text2=line2)
     parts = apply_overrides(parts, opts, log)
     report = {"source": str(glb), "mode": opts.mode, "scale": _scale_text(scale),
+              "real_m": [round(x, 2) for x in real], "longest_mm": round(opts.size_mm, 1),
               "min_feature_mm": round(min_mm, 2), "stand": opts.stand}
 
     if opts.mode == "solid":

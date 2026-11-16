@@ -41,7 +41,9 @@ Both switches carry through to prints and exports, and you can use them together
 
 ### 3D printing
 
-Pick a size (**Longest side**, in millimeters) and click **Export printable file**. You get a single watertight 3MF or STL that drops straight into your slicer. Behind the scenes it does the cleanup you'd otherwise spend an evening on in Blender:
+First pick a size. You can give it either a **Scale** like 1:500 or a **Longest side** in millimeters, and the app fills in the other one from the model's real size in the game. If you're printing a fleet, set the scale once: it sticks as you move from ship to ship, so a Gladius and an Idris come out at the right size next to each other.
+
+Click **Export printable file** and you get a single watertight 3MF or STL that drops straight into your slicer. Behind the scenes it does the cleanup you'd otherwise spend an evening on in Blender:
 
 - Removes collision meshes, low-detail copies, shields and decals.
 - Seals the gaps between hull panels and fills the inside so you get one solid body, no matter how messy the game mesh is.
@@ -147,6 +149,7 @@ sc-sandbox update [-c PTU | --all]           index the current build
 sc-sandbox search gladius [-c PTU]           search the index
 sc-sandbox model AEGS_Gladius --out g.glb    export a model as GLB
 sc-sandbox print gladius --size 200          printable 3MF, 200 mm long
+sc-sandbox print gladius --scale 100         printable 3MF at 1:100
 sc-sandbox print gladius --mode parts --format stl   one STL per part
 sc-sandbox print gladius --stand peg --list-thin     list parts too thin to print at that size
 sc-sandbox print my_model.glb --glb          make any GLB printable

@@ -124,7 +124,7 @@ def cmd_print(a, s):
     overrides = {n: {"action": "remove"} for n in a.remove}
     overrides.update({n: {"action": "thicken", "mm": float(mm)} for n, mm in (t.rsplit("=", 1) for t in a.thicken_part)})
     opts = printprep.PrintOptions.from_settings(
-        s, size_mm=a.size, mode=a.mode, voxel_mm=a.voxel, format=a.format, nozzle_mm=a.nozzle,
+        s, size_mm=a.size, scale=a.scale, mode=a.mode, voxel_mm=a.voxel, format=a.format, nozzle_mm=a.nozzle,
         min_feature_nozzles=a.min_nozzles, thicken=False if a.no_thicken else None, hollow_mm=a.hollow,
         tilt_deg=a.tilt, stand=a.stand, stand_height_mm=a.stand_height, part_overrides=overrides or None,
         stand_shape="rect" if (a.plate is not None or a.plate_scale) else None,
@@ -137,7 +137,7 @@ def cmd_print(a, s):
         print(f"-- {info['size_mm']} mm at {info['scale']}, minimum {info['min_feature_mm']} mm")
         return
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in stem).strip("_")
-    out = Path(a.out) if a.out else config.home() / "exports" / f"{safe}_{int(opts.size_mm)}mm_{opts.mode}"
+    out = Path(a.out) if a.out else config.home() / "exports" / f"{safe}_{printprep.file_tag(opts)}_{opts.mode}"
     rep = printprep.prepare(glb, out, opts)
     printlog.add(stem, key, opts, rep)
     print(json.dumps(rep, indent=2))
@@ -235,6 +235,7 @@ def main(argv=None):
     pr.add_argument("asset", help="record name, search text, or a .glb path with --glb")
     pr.add_argument("--glb", action="store_true", help="treat ASSET as a local .glb file")
     pr.add_argument("--size", type=float, help="longest side in mm")
+    pr.add_argument("--scale", type=float, metavar="N", help="print at 1:N instead of a set size (wins over --size)")
     pr.add_argument("--mode", choices=["solid", "parts"])
     pr.add_argument("--voxel", type=float, help="detail size in mm (solid mode)")
     pr.add_argument("--format", choices=list(printprep.PRINT_FORMATS))

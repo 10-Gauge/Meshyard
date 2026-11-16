@@ -14,6 +14,9 @@ public sealed partial class Inspector : UserControl
     int _loadSeq;
     string _variant = "preview";
     bool _settingGear;
+    bool _syncingSize;
+    double[]? _realM;                // the selected model's real size in meters (length, width, height)
+    string _sizeBy = Prefs.Get("printSizeBy", "size");  // which field the user set last: "scale" or "size"
     readonly List<ThinRow> _thin = [];
 
     sealed record ThinRow(string Name, ComboBox Action, NumberBox Mm);
@@ -73,7 +76,10 @@ public sealed partial class Inspector : UserControl
         if (_defaultsApplied || _state!.PrintDefaults.Count == 0) return;
         _defaultsApplied = true;
         var p = _state.PrintDefaults;
-        SizeBox.Value = p.Num("size_mm", 150);
+        _syncingSize = true;
+        SizeBox.Value = double.TryParse(Prefs.Get("printSize"), out var mm) ? mm : p.Num("size_mm", 150);
+        ScaleBox.Value = double.TryParse(Prefs.Get("printScale"), out var n) ? n : double.NaN;
+        _syncingSize = false;
         VoxelBox.Value = p.Num("voxel_mm", 0.2);
         NozzleBox.Value = p.Num("nozzle_mm", 0.4);
         MinNBox.Value = p.Num("min_feature_nozzles", 3);
@@ -135,14 +141,22 @@ public sealed partial class Inspector : UserControl
         if (t.IsFigure && Picked(LogoBox) == "auto") Pick(LogoBox, "");  // a figure has no maker of its own
         ClearThin();
         SizeBox.Header = t.IsFigure ? "Height (mm)" : "Longest side (mm)";
+        _realM = null;
+        UpdateScaleInfo();
         if (t.IsFigure)
         {
             // figures: size is the height; finer detail and a stand under the feet suit them
-            if (SizeBox.Value > 120) SizeBox.Value = 75;
+            if (_sizeBy == "size" && SizeBox.Value > 120)
+            {
+                _syncingSize = true;  // a figure-sized default, not the user's own choice
+                SizeBox.Value = 75;
+                _syncingSize = false;
+            }
             if (VoxelBox.Value > 0.12) VoxelBox.Value = 0.1;
             if (Picked(StandBox) == "none") Pick(StandBox, "attached");
             _loadSeq++;
             _ = _state!.Viewer.Show(_state.Api.Url(t.FigureUrl!));
+            _ = Measure(t, "preview");
         }
         else _ = LoadModel("preview");
     }
@@ -182,7 +196,11 @@ public sealed partial class Inspector : UserControl
                 ["gear"] = gearUp ? "up" : "down", ["weapons"] = weaponsOut ? "out" : "",
             });
             var r = await s.Jobs.RunAsync(job);
-            if (!spawn && seq == _loadSeq && r.Str("url") is { Length: > 0 } url) await s.Viewer.Show(s.Api.Url(url));
+            if (!spawn && seq == _loadSeq && r.Str("url") is { Length: > 0 } url)
+            {
+                await s.Viewer.Show(s.Api.Url(url));
+                _ = Measure(t, variant);
+            }
         }
         catch (Exception e)
         {
@@ -222,6 +240,76 @@ public sealed partial class Inspector : UserControl
 
     void Strength_Changed(NumberBox sender, NumberBoxValueChangedEventArgs args) => UpdateStrength();
 
+    // Scale and size are two views of one number: with the model's real size known,
+    // setting either one fills in the other. Whichever the user set last is what the
+    // export uses, and it carries over to the next model, so a fleet printed at 1:500
+    // stays at 1:500.
+
+    /// <summary>The model's real size in meters, from the file the viewer just loaded.</summary>
+    async Task Measure(Target t, string variant)
+    {
+        var s = _state!;
+        try
+        {
+            var job = await s.Api.StartJobAsync("api/print/measure", Request(t, new JsonObject { ["variant"] = variant }));
+            var r = await s.Jobs.RunAsync(job, quiet: true);
+            if (s.Selected != t) return;
+            var dims = (r["real_m"] as JsonArray ?? []).Select(x => x!.GetValue<double>()).ToArray();
+            if (dims.Length != 3 || dims.Max() <= 0) return;
+            _realM = dims;
+            SyncSize();
+        }
+        catch { /* the fields still work, just without the conversion */ }
+    }
+
+    double LongestM => _realM?.Max() ?? 0;
+
+    void Scale_Changed(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        if (_syncingSize) return;
+        if (!double.IsNaN(ScaleBox.Value)) SetSizeBy("scale");
+        SyncSize();
+    }
+
+    void Size_Changed(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        if (_syncingSize) return;
+        SetSizeBy("size");
+        SyncSize();
+    }
+
+    void SetSizeBy(string by)
+    {
+        _sizeBy = by;
+        Prefs.Set("printSizeBy", by);
+        Prefs.Set(by == "scale" ? "printScale" : "printSize", $"{(by == "scale" ? ScaleBox.Value : SizeBox.Value)}");
+    }
+
+    /// <summary>Fill in whichever field the user didn't set.</summary>
+    void SyncSize()
+    {
+        if (LongestM > 0)
+        {
+            _syncingSize = true;
+            if (_sizeBy == "scale" && Safe(ScaleBox.Value) > 0)
+                SizeBox.Value = Math.Round(LongestM * 1000 / ScaleBox.Value, 1);
+            else if (Safe(SizeBox.Value) > 0)
+                ScaleBox.Value = Math.Round(LongestM * 1000 / SizeBox.Value, LongestM * 1000 / SizeBox.Value < 10 ? 1 : 0);
+            _syncingSize = false;
+        }
+        UpdateScaleInfo();
+    }
+
+    void UpdateScaleInfo()
+    {
+        if (_state?.Selected == null || _realM == null) { ScaleInfo.Text = ""; return; }  // not measured yet
+        var real = string.Join(" × ", _realM.Select(m => $"{m:0.#}"));
+        var n = Safe(ScaleBox.Value);
+        ScaleInfo.Text = n > 0
+            ? $"Real size {real} m. At 1:{n:0.#} it prints {string.Join(" × ", _realM.Select(m => $"{m * 1000 / n:0}"))} mm."
+            : $"Real size {real} m.";
+    }
+
     void UpdateStrength()
     {
         var mm = Safe(NozzleBox.Value) * Safe(MinNBox.Value);
@@ -251,6 +339,8 @@ public sealed partial class Inspector : UserControl
             ["min_feature_nozzles"] = Safe(MinNBox.Value), ["stand_height_mm"] = Safe(StandHBox.Value),
             ["tilt_deg"] = Safe(TiltBox.Value), ["hollow_mm"] = Safe(HollowBox.Value),
         };
+        // a scale the user chose wins, so every model comes out at that scale
+        if (_sizeBy == "scale" && Safe(ScaleBox.Value) > 0) o["scale"] = ScaleBox.Value;
         var overrides = new JsonObject();
         foreach (var r in _thin)
         {

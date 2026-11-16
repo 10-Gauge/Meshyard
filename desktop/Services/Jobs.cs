@@ -43,11 +43,12 @@ public sealed class Jobs(Api api)
 {
     public ObservableCollection<JobItem> Items { get; } = [];
 
-    /// <summary>Wait for a job; reports each new log line; returns its result or throws.</summary>
-    public async Task<JsonNode> RunAsync(string jobId, Action<string>? onLog = null)
+    /// <summary>Wait for a job; reports each new log line; returns its result or throws.
+    /// A quiet job stays out of the activity panel.</summary>
+    public async Task<JsonNode> RunAsync(string jobId, Action<string>? onLog = null, bool quiet = false)
     {
         var item = new JobItem { Label = "Working…" };
-        Items.Insert(0, item);
+        if (!quiet) Items.Insert(0, item);
         var seen = 0;
         while (true)
         {

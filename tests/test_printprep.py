@@ -310,3 +310,19 @@ def test_canopy_with_glass_material_gets_no_convex_fill(tmp_path):
                      parent={"cockpit_canopy_6": "cockpit_canopy"})
     names = [n for n, _ in printprep.load_parts(glb, [])]
     assert not any(n.endswith("_glass") for n in names), names
+
+
+def test_scale_sets_the_size_and_tilt_keeps_it(glb, tmp_path):
+    """1:100 of a 14 m wingspan is 140 mm, whatever the display angle."""
+    real = printprep.measure(glb, EXCL)
+    assert abs(real["longest_m"] - 14) < 0.1
+    q = lambda *_: None  # noqa: E731
+    rep = printprep.prepare(glb, tmp_path / "a", printprep.PrintOptions(scale=100, size_mm=50, mode="parts",
+                            format="stl", exclude_nodes=EXCL), log=q)
+    assert rep["scale"] == "1:100" and abs(max(rep["size_mm"]) - 140) < 1 and abs(rep["longest_mm"] - 140) < 1
+    assert abs(max(rep["real_m"]) - 14) < 0.1
+    tilted = printprep.prepare(glb, tmp_path / "b", printprep.PrintOptions(scale=100, tilt_deg=20, mode="parts",
+                               format="stl", exclude_nodes=EXCL), log=q)
+    assert tilted["scale"] == "1:100"
+    assert printprep.file_tag(printprep.PrintOptions(scale=12.5)) == "1-12_5"
+    assert printprep.file_tag(printprep.PrintOptions(size_mm=150)) == "150mm"

@@ -95,6 +95,19 @@
                         </StackPanel>
                     </Expander.Header>
                     <StackPanel Spacing="12">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <NumberBox x:Name="ScaleBox" Header="Scale (1 : N)" Minimum="0.1" Maximum="100000" SmallChange="10"
+                                       LargeChange="100" SpinButtonPlacementMode="Compact" PlaceholderText="500"
+                                       ValueChanged="Scale_Changed"
+                                       ToolTipService.ToolTip="Print every model at the same scale and their sizes compare like they do in the game" />
+                            <NumberBox x:Name="SizeBox" Grid.Column="1" Header="Longest side (mm)" Minimum="1" Maximum="100000" SmallChange="5"
+                                       LargeChange="25" SpinButtonPlacementMode="Compact" ValueChanged="Size_Changed" />
+                        </Grid>
+                        <TextBlock x:Name="ScaleInfo" Style="{StaticResource Secondary}" TextWrapping="Wrap" />
                         <Grid ColumnSpacing="12" RowSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -104,13 +117,11 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
-                            <NumberBox x:Name="SizeBox" Header="Longest side (mm)" Minimum="10" Maximum="2000" SmallChange="5"
-                                       LargeChange="25" SpinButtonPlacementMode="Compact" />
-                            <NumberBox x:Name="VoxelBox" Grid.Column="1" Header="Detail (mm)" Minimum="0.05" Maximum="2" SmallChange="0.05"
+                            <ComboBox x:Name="ModeBox" Header="Body" HorizontalAlignment="Stretch" />
+                            <ComboBox x:Name="FormatBox" Grid.Column="1" Header="Format" HorizontalAlignment="Stretch" />
+                            <NumberBox x:Name="VoxelBox" Grid.Row="1" Header="Detail (mm)" Minimum="0.05" Maximum="2" SmallChange="0.05"
                                        SpinButtonPlacementMode="Compact"
                                        ToolTipService.ToolTip="Resolution of the solid remesh: 0.1 suits resin, 0.2 to 0.4 suits FDM" />
-                            <ComboBox x:Name="ModeBox" Grid.Row="1" Header="Body" HorizontalAlignment="Stretch" />
-                            <ComboBox x:Name="FormatBox" Grid.Row="1" Grid.Column="1" Header="Format" HorizontalAlignment="Stretch" />
                         </Grid>
 
                         <TextBlock Text="Strength" Style="{StaticResource SectionHeader}" Margin="0,8,0,0" />

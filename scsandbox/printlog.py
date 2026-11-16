@@ -32,7 +32,7 @@ def add(name: str, key: str, opts, report: dict) -> dict:
         "name": name,
         "key": key,
         "scale": report.get("scale", ""),
-        "longest_side_mm": f"{opts.size_mm:g}",
+        "longest_side_mm": f"{report.get('longest_mm', opts.size_mm):g}",
         "size_mm": " x ".join(f"{v:.0f}" for v in report.get("size_mm") or []),
         "body": "solid" if opts.mode == "solid" else "parts",
         "detail_mm": f"{report.get('voxel_mm', opts.voxel_mm):g}" if opts.mode == "solid" else "",
