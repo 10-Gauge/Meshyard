@@ -1,0 +1,208 @@
+<UserControl
+    x:Class="SCAssetBrowser.Views.Inspector"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <!-- nothing selected -->
+        <StackPanel x:Name="Placeholder" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8" Padding="24">
+            <FontIcon Glyph="&#xE8B9;" FontSize="36" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            <TextBlock Text="Nothing selected" Style="{StaticResource BodyStrongTextBlockStyle}" HorizontalAlignment="Center" />
+            <TextBlock Text="Pick an asset or build a character to preview, print or export it." Style="{StaticResource Secondary}"
+                       HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="240" />
+        </StackPanel>
+
+        <ScrollViewer x:Name="Details" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+            <StackPanel Padding="18,16,18,24" Spacing="12">
+                <StackPanel Spacing="4">
+                    <TextBlock x:Name="NameText" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                    <TextBlock x:Name="MetaText" Style="{StaticResource Secondary}" IsTextSelectionEnabled="True" />
+                </StackPanel>
+                <TextBlock x:Name="DescText" Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" MaxLines="7"
+                           TextTrimming="WordEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                <!-- asset actions -->
+                <Grid x:Name="AssetActions" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="PreviewButton" AutomationProperties.Name="Preview" HorizontalAlignment="Stretch" Click="Preview_Click"
+                            ToolTipService.ToolTip="Quick, lighter preview">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE890;" FontSize="14" />
+                            <TextBlock Text="Preview" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="FullButton" AutomationProperties.Name="Full detail" Grid.Column="1" HorizontalAlignment="Stretch" Click="Full_Click"
+                            ToolTipService.ToolTip="Full-detail model with textures">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE71E;" FontSize="14" />
+                            <TextBlock Text="Full detail" />
+                        </StackPanel>
+                    </Button>
+                    <DropDownButton x:Name="SpawnButton" AutomationProperties.Name="Spawn" Grid.Column="2" HorizontalAlignment="Stretch"
+                                    ToolTipService.ToolTip="Queue it for the Blender sandbox">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xEA86;" FontSize="14" />
+                            <TextBlock Text="Spawn" />
+                        </StackPanel>
+                        <DropDownButton.Flyout>
+                            <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                <MenuFlyoutItem Text="Spawn in Blender sandbox" Click="Spawn_Click">
+                                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xEA86;" /></MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Spawn animated (gear, doors, ramps)" Click="SpawnAnim_Click">
+                                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE768;" /></MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                            </MenuFlyout>
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
+                </Grid>
+
+                <Grid x:Name="GearRow" ColumnSpacing="12" Margin="2,0,0,0"
+                      ToolTipService.ToolTip="Show and print the ship with its landing gear retracted and the gear doors closed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE709;" FontSize="16" VerticalAlignment="Center" />
+                    <ToggleSwitch x:Name="GearSwitch" Grid.Column="1" Header="Landing gear" OffContent="Down" OnContent="Up"
+                                  Toggled="Gear_Toggled" AutomationProperties.Name="Landing gear up" />
+                </Grid>
+
+                <Grid x:Name="WeaponsRow" ColumnSpacing="12" Margin="2,0,0,0"
+                      ToolTipService.ToolTip="Show and print the ship with its deployable guns and missile racks out (Alpha Wolf, M80 and others)">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE7C1;" FontSize="16" VerticalAlignment="Center" />
+                    <ToggleSwitch x:Name="WeaponsSwitch" Grid.Column="1" Header="Weapons" OffContent="Stowed" OnContent="Deployed"
+                                  Toggled="Gear_Toggled" AutomationProperties.Name="Weapons deployed" />
+                </Grid>
+
+                <!-- 3D print -->
+                <Expander x:Name="PrintExpander" IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="12" Padding="0,10">
+                            <FontIcon Glyph="&#xE749;" FontSize="16" />
+                            <StackPanel>
+                                <TextBlock Text="3D print" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="A watertight file for your slicer" Style="{StaticResource Secondary}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Expander.Header>
+                    <StackPanel Spacing="12">
+                        <Grid ColumnSpacing="12" RowSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <NumberBox x:Name="SizeBox" Header="Longest side (mm)" Minimum="10" Maximum="2000" SmallChange="5"
+                                       LargeChange="25" SpinButtonPlacementMode="Compact" />
+                            <NumberBox x:Name="VoxelBox" Grid.Column="1" Header="Detail (mm)" Minimum="0.05" Maximum="2" SmallChange="0.05"
+                                       SpinButtonPlacementMode="Compact"
+                                       ToolTipService.ToolTip="Resolution of the solid remesh: 0.1 suits resin, 0.2 to 0.4 suits FDM" />
+                            <ComboBox x:Name="ModeBox" Grid.Row="1" Header="Body" HorizontalAlignment="Stretch" />
+                            <ComboBox x:Name="FormatBox" Grid.Row="1" Grid.Column="1" Header="Format" HorizontalAlignment="Stretch" />
+                        </Grid>
+
+                        <TextBlock Text="Strength" Style="{StaticResource SectionHeader}" Margin="0,8,0,0" />
+                        <ToggleSwitch x:Name="ThickenSwitch" Header="Thicken thin parts (antennas, barrels, fins)" OnContent="On" OffContent="Off" />
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <NumberBox x:Name="NozzleBox" Header="Nozzle (mm)" Minimum="0.1" Maximum="1.2" SmallChange="0.05"
+                                       SpinButtonPlacementMode="Compact" ValueChanged="Strength_Changed" />
+                            <NumberBox x:Name="MinNBox" Grid.Column="1" Header="At least (nozzle widths)" Minimum="1" Maximum="10"
+                                       SmallChange="0.5" SpinButtonPlacementMode="Compact" ValueChanged="Strength_Changed" />
+                        </Grid>
+                        <TextBlock x:Name="MinMmText" Style="{StaticResource Secondary}" />
+                        <Button x:Name="ThinButton" AutomationProperties.Name="Find thin parts" Click="Thin_Click" HorizontalAlignment="Stretch">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE71E;" FontSize="14" />
+                                <TextBlock Text="Find thin parts…" />
+                            </StackPanel>
+                        </Button>
+                        <StackPanel x:Name="ThinPanel" Spacing="6" Visibility="Collapsed">
+                            <TextBlock x:Name="ThinSummary" Style="{StaticResource Secondary}" />
+                            <StackPanel x:Name="ThinRows" Spacing="6" />
+                        </StackPanel>
+
+                        <TextBlock Text="Display" Style="{StaticResource SectionHeader}" Margin="0,8,0,0" />
+                        <ComboBox x:Name="StandBox" Header="Stand" HorizontalAlignment="Stretch" SelectionChanged="Stand_Changed" />
+                        <Grid ColumnSpacing="12" RowSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <ComboBox x:Name="ShapeBox" Header="Base" HorizontalAlignment="Stretch" SelectionChanged="Stand_Changed" />
+                            <NumberBox x:Name="StandHBox" Grid.Column="1" Header="Stand height (mm)" Minimum="5" Maximum="300" SmallChange="5"
+                                       SpinButtonPlacementMode="Compact" />
+                            <NumberBox x:Name="TiltBox" Grid.Row="1" Header="Display angle (°)" Minimum="-45" Maximum="45" SmallChange="5"
+                                       SpinButtonPlacementMode="Compact" ToolTipService.ToolTip="Tilts the nose up (negative tilts it down)" />
+                            <NumberBox x:Name="HollowBox" Grid.Row="1" Grid.Column="1" Header="Hollow walls (mm)" Minimum="0" Maximum="10"
+                                       SmallChange="0.5" SpinButtonPlacementMode="Compact"
+                                       ToolTipService.ToolTip="For resin: leaves walls this thick. 0 keeps it solid." />
+                        </Grid>
+                        <TextBox x:Name="PlateText" Header="Name plate text" MaxLength="60" PlaceholderText="Ship name" />
+                        <TextBox x:Name="PlateText2" Header="Second line (optional, smaller)" MaxLength="60"
+                                 PlaceholderText="Ship's own name, a motto, a date…" />
+                        <ComboBox x:Name="LogoBox" Header="Embossed logo" HorizontalAlignment="Stretch"
+                                  ToolTipService.ToolTip="The manufacturer's logo from the game, raised on the plate beside the text" />
+
+                        <Button x:Name="PrintButton" AutomationProperties.Name="Export printable file" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch"
+                                Margin="0,8,0,0" Click="Print_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE749;" FontSize="14" />
+                                <TextBlock Text="Export printable file" />
+                            </StackPanel>
+                        </Button>
+                        <StackPanel x:Name="PrintBusy" Spacing="6" Visibility="Collapsed">
+                            <ProgressBar IsIndeterminate="True" />
+                            <TextBlock x:Name="PrintBusyText" Style="{StaticResource Secondary}" />
+                        </StackPanel>
+                        <InfoBar x:Name="PrintResult" IsClosable="True" />
+                    </StackPanel>
+                </Expander>
+
+                <!-- model export -->
+                <Expander x:Name="ExportExpander" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <Expander.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="12" Padding="0,10">
+                            <FontIcon Glyph="&#xEDE1;" FontSize="16" />
+                            <StackPanel>
+                                <TextBlock Text="Export 3D model" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="GLB, FBX, OBJ, Blender and more" Style="{StaticResource Secondary}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Expander.Header>
+                    <StackPanel Spacing="12">
+                        <ComboBox x:Name="ExportFormatBox" Header="Format" HorizontalAlignment="Stretch" SelectionChanged="ExportFormat_Changed" />
+                        <CheckBox x:Name="TexturesBox" Content="Textures and materials" IsChecked="True" />
+                        <Button x:Name="ExportButton" AutomationProperties.Name="Export model" HorizontalAlignment="Stretch" Click="Export_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xEDE1;" FontSize="14" />
+                                <TextBlock Text="Export model" />
+                            </StackPanel>
+                        </Button>
+                        <ProgressBar x:Name="ExportBusy" IsIndeterminate="True" Visibility="Collapsed" />
+                        <InfoBar x:Name="ExportResult" IsClosable="True" />
+                    </StackPanel>
+                </Expander>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

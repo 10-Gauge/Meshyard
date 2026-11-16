@@ -1,0 +1,84 @@
+<UserControl
+    x:Class="SCAssetBrowser.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="920" Padding="36,8,36,36" Spacing="12">
+            <TextBlock Text="Settings" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,8" />
+
+            <TextBlock Text="Game" Style="{StaticResource SectionHeader}" Margin="0,4,0,0" />
+            <Border Style="{StaticResource Card}">
+                <StackPanel Spacing="12">
+                    <Grid>
+                        <StackPanel>
+                            <TextBlock Text="Installs" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock Text="Star Citizen builds found on this PC. Data.p4k is only ever read." Style="{StaticResource Secondary}" />
+                        </StackPanel>
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Center" Click="AddFolder_Click" AutomationProperties.Name="Add game folder">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE8F4;" FontSize="14" />
+                                <TextBlock Text="Add game folder…" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <StackPanel x:Name="InstallRows" Spacing="6" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel Spacing="12">
+                    <Grid>
+                        <StackPanel>
+                            <TextBlock Text="Tools" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock Text="Free tools that read the game files, and Blender for the sandbox." Style="{StaticResource Secondary}" />
+                        </StackPanel>
+                        <Button x:Name="ToolsButton" AutomationProperties.Name="Download or update tools" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Tools_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE896;" FontSize="14" />
+                                <TextBlock Text="Download or update" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <StackPanel x:Name="ToolRows" Spacing="6" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="Appearance" Style="{StaticResource SectionHeader}" />
+            <Border Style="{StaticResource Card}">
+                <Grid>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Theme" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock Text="Light, dark, or follow Windows." Style="{StaticResource Secondary}" />
+                    </StackPanel>
+                    <ComboBox x:Name="ThemeBox" HorizontalAlignment="Right" VerticalAlignment="Center" MinWidth="180"
+                              SelectionChanged="Theme_Changed" />
+                </Grid>
+            </Border>
+
+            <TextBlock Text="Files" Style="{StaticResource SectionHeader}" />
+            <Border Style="{StaticResource Card}">
+                <Grid ColumnSpacing="8">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Exports and data" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="HomeText" Style="{StaticResource Secondary}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button Content="Exports folder" Click="Exports_Click" />
+                        <Button Content="Data folder" Click="Home_Click" />
+                        <Button Content="Engine log" Click="Log_Click" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <TextBlock Text="About" Style="{StaticResource SectionHeader}" />
+            <Border Style="{StaticResource Card}">
+                <StackPanel Spacing="6">
+                    <TextBlock x:Name="AboutTitle" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <TextBlock Style="{StaticResource Secondary}"
+                               Text="Runs offline against your own game install. It never talks to CIG's servers and never touches the game client or Easy Anti-Cheat. Extracted game content is CIG's IP: keep it for personal use and don't redistribute it." />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
