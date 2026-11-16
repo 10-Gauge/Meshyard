@@ -20,7 +20,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import blendertools, catalog, characters, config, exporters, gear, installs, logos, models, printprep, rig, sandbox, tools
+from . import (blendertools, catalog, characters, config, exporters, gear, installs, logos, models, printlog,
+               printprep, rig, sandbox, tools)
 
 WEB = Path(__file__).parent / "web"
 mimetypes.add_type("model/gltf-binary", ".glb")
@@ -211,6 +212,7 @@ class App:
     def job_print(self, channel: str, b: dict, opts: dict):
         inst = self.install(channel)
         name, glb_for, figure, maker = self._target(inst, b)
+        key = log_key(self.con(inst), b)
         if figure:
             opts = {**opts, "figure": True}
         logo = str(opts.pop("stand_logo", "") or "")
@@ -232,6 +234,10 @@ class App:
             stem = re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_") or "model"
             out = config.home() / "exports" / f"{stem}_{int(po.size_mm)}mm_{po.mode}"
             rep = printprep.prepare(glb, out, po, log=log)
+            try:
+                printlog.add(name, key, po, rep)
+            except OSError as e:
+                log(f"couldn't add this export to the print log: {e}")
             rep["downloads"] = [f"/files/export/{quote(Path(f).relative_to(config.home() / 'exports').as_posix())}"
                                 for f in rep["files"]]
             return rep
@@ -304,7 +310,16 @@ PRINT_OPTS = {"size_mm": float, "mode": str, "voxel_mm": float, "format": str, "
               "min_feature_nozzles": float, "thicken": bool, "hollow_mm": float, "tilt_deg": float,
               "stand": str, "stand_height_mm": float, "part_overrides": dict,
               "stand_shape": str, "stand_text": lambda v: str(v)[:60], "stand_text2": lambda v: str(v)[:60],
+              "stand_scale": bool,
               "stand_logo": lambda v: re.sub(r"[^A-Za-z]", "", str(v))[:8]}  # manufacturer code or "auto"
+
+
+def log_key(con, b: dict) -> str:
+    """What a print is logged under: the asset's record name, or the figure's name."""
+    if b.get("figure"):
+        return "figure:" + str(b.get("label") or b["figure"])
+    a = catalog.get(con, int(b["id"])) if b.get("id") is not None else None
+    return a["record"] if a else ""
 
 
 def print_opts(body: dict) -> dict:
@@ -416,6 +431,9 @@ def make_handler(app: App):
                 if m:
                     job = app.jobs.get(m.group(1))
                     return self.json(job) if job else self.json({"error": "not found"}, 404)
+                if p == "/api/print/log":  # past print exports (all, or one item's)
+                    return self.json({"items": printlog.entries(q.get("key") or None),
+                                      "path": str(printlog.path())})
                 if p == "/api/sandbox/queue":
                     return self.json({"items": sandbox.since(int(q.get("after", 0)))})
                 m = re.fullmatch(r"/files/model/([\w-]+)/([\w.\-]+)/(.+)", p)

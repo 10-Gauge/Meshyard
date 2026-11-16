@@ -263,7 +263,7 @@ for (const id of ["p-nozzle", "p-minn", "p-stand", "p-standshape"]) $(id).addEve
 function printOptions() {
   const o = { mode: $("p-mode").value, format: $("p-format").value, stand: $("p-stand").value, thicken: $("p-thicken").checked,
     stand_shape: $("p-standshape").value, stand_text: $("p-standtext").value.trim(),
-    stand_text2: $("p-standtext2").value.trim(), stand_logo: $("p-logo").value };
+    stand_text2: $("p-standtext2").value.trim(), stand_scale: $("p-standscale").checked, stand_logo: $("p-logo").value };
   for (const [k, id] of Object.entries(PRINT_FIELDS)) o[k] = +$(id).value;
   const overrides = {};
   for (const row of $("p-thin").querySelectorAll("tr[data-name]")) {

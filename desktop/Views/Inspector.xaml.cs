@@ -131,6 +131,7 @@ public sealed partial class Inspector : UserControl
         PrintResult.IsOpen = false;
         ExportResult.IsOpen = false;
         PlateText.Text = t.Name;
+        _ = ShowLastPrint(t);
         if (t.IsFigure && Picked(LogoBox) == "auto") Pick(LogoBox, "");  // a figure has no maker of its own
         ClearThin();
         SizeBox.Header = t.IsFigure ? "Height (mm)" : "Longest side (mm)";
@@ -236,7 +237,7 @@ public sealed partial class Inspector : UserControl
         var none = Picked(StandBox) == "none";
         ShapeBox.IsEnabled = !none;
         StandHBox.IsEnabled = !none;
-        PlateText.IsEnabled = PlateText2.IsEnabled = LogoBox.IsEnabled = !none && Picked(ShapeBox) == "rect";
+        PlateText.IsEnabled = PlateText2.IsEnabled = LogoBox.IsEnabled = ScaleSwitch.IsEnabled = !none && Picked(ShapeBox) == "rect";
     }
 
     JsonObject PrintOptions()
@@ -245,7 +246,7 @@ public sealed partial class Inspector : UserControl
         {
             ["mode"] = Picked(ModeBox), ["format"] = Picked(FormatBox), ["stand"] = Picked(StandBox),
             ["thicken"] = ThickenSwitch.IsOn, ["stand_shape"] = Picked(ShapeBox), ["stand_text"] = PlateText.Text.Trim(),
-            ["stand_text2"] = PlateText2.Text.Trim(), ["stand_logo"] = Picked(LogoBox),
+            ["stand_text2"] = PlateText2.Text.Trim(), ["stand_logo"] = Picked(LogoBox), ["stand_scale"] = ScaleSwitch.IsOn,
             ["size_mm"] = Safe(SizeBox.Value), ["voxel_mm"] = Safe(VoxelBox.Value), ["nozzle_mm"] = Safe(NozzleBox.Value),
             ["min_feature_nozzles"] = Safe(MinNBox.Value), ["stand_height_mm"] = Safe(StandHBox.Value),
             ["tilt_deg"] = Safe(TiltBox.Value), ["hollow_mm"] = Safe(HollowBox.Value),
@@ -268,6 +269,62 @@ public sealed partial class Inspector : UserControl
         if (GearUp) body["gear"] = "up";
         if (WeaponsOut) body["weapons"] = "out";
         return body;
+    }
+
+    // ---------- print log ----------
+
+    static string LogKey(Target t) => t.IsFigure ? "figure:" + t.Name : t.Asset?.Record ?? "";
+
+    /// <summary>"Last printed ..." for the selected item, from the print log.</summary>
+    async Task ShowLastPrint(Target t)
+    {
+        LastPrintText.Visibility = Visibility.Collapsed;
+        try
+        {
+            var d = await _state!.Api.GetAsync("api/print/log", ("key", LogKey(t)));
+            if (_state.Selected != t) return;
+            var rows = d.Items("items").ToList();
+            if (rows.Count == 0) return;
+            var r = rows[0];
+            var more = rows.Count > 1 ? $" ({rows.Count} prints in all)" : "";
+            LastPrintText.Text = $"Last printed {r.Str("date")} at {r.Str("scale")}, {r.Str("longest_side_mm")} mm{more}.";
+            LastPrintText.Visibility = Visibility.Visible;
+        }
+        catch { /* no log yet */ }
+    }
+
+    async void History_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var d = await _state!.Api.GetAsync("api/print/log");
+            var rows = d.Items("items").ToList();
+            var list = new StackPanel { Spacing = 8 };
+            if (rows.Count == 0)
+                list.Children.Add(new TextBlock { Text = "Nothing exported for printing yet.", Style = (Style)Application.Current.Resources["Secondary"] });
+            foreach (var r in rows.Take(300))
+            {
+                var row = new StackPanel();
+                row.Children.Add(new TextBlock { Text = $"{r.Str("name")}  ·  {r.Str("scale")}", Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] });
+                var bits = new List<string> { r.Str("date"), $"{r.Str("longest_side_mm")} mm" };
+                if (r.Str("stand").Length > 0) bits.Add($"{r.Str("stand")} stand");
+                if (r.Str("plate").Length > 0) bits.Add($"plate: {r.Str("plate")}");
+                row.Children.Add(new TextBlock { Text = string.Join("  ·  ", bits), TextWrapping = TextWrapping.Wrap,
+                                                 Style = (Style)Application.Current.Resources["Secondary"] });
+                list.Children.Add(row);
+            }
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = "Print history",
+                Content = new ScrollViewer { Content = list, MaxHeight = 480 },
+                PrimaryButtonText = rows.Count > 0 ? "Open the log file" : "",
+                CloseButtonText = "Close",
+            };
+            if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+                await Windows.System.Launcher.LaunchUriAsync(new Uri(d.Str("path")));
+        }
+        catch (Exception ex) { _main!.ShowError("Couldn't read the print history", ex.Message); }
     }
 
     async void Print_Click(object sender, RoutedEventArgs e)
@@ -295,6 +352,7 @@ public sealed partial class Inspector : UserControl
             if (r.Long("thickened") > 0) parts.Add($"{r.Long("thickened")} thin parts thickened to {r.Num("min_feature_mm"):0.##} mm");
             var files = r.Items("files").Select(f => f.GetValue<string>()).ToList();
             ShowResult(PrintResult, InfoBarSeverity.Success, $"{size} mm ({r.Str("scale")})", string.Join(" · ", parts), files);
+            _ = ShowLastPrint(t);
         }
         catch (Exception ex)
         {
