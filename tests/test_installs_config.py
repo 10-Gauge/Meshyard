@@ -17,7 +17,7 @@ def test_root_can_be_the_channel_folder(tmp_path):
     live = tmp_path / "StarCitizen" / "LIVE"
     live.mkdir(parents=True)
     (live / "Data.p4k").write_bytes(b"PK")
-    found = installs.discover([str(live)])
+    found = [i for i in installs.discover([str(live)]) if str(tmp_path) in str(i.path)]  # this PC may have a real PTU
     assert [i.channel for i in found] == ["LIVE"]
     assert found[0].version == "unknown" and found[0].change  # no manifest still gives a build id
 
