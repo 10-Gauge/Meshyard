@@ -45,6 +45,7 @@ public sealed partial class MainWindow : Window
         Root.ActualThemeChanged += (_, _) => { UpdateCaptionColors(); _ = _state?.Viewer.SetTheme(IsDark); };
         Closed += (_, _) => _engine?.Dispose();
         _ = StartAsync();
+        _ = CheckForUpdateAsync();
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -108,6 +109,59 @@ public sealed partial class MainWindow : Window
     }
 
     void Retry_Click(object sender, RoutedEventArgs e) => _ = StartAsync();
+
+    // ---------- updates ----------
+
+    Updater.Release? _update;
+
+    /// <summary>Each time the app opens: if GitHub has a newer release, say so in a bar.</summary>
+    async Task CheckForUpdateAsync()
+    {
+        if (!Updater.CanSelfUpdate) return;
+        Updater.CleanUp();
+        try { _update = await Updater.CheckAsync(); }
+        catch { return; }   // offline or GitHub unreachable: try again next time
+        if (_update == null) return;
+        UpdateBar.Title = $"Version {_update.Version.ToString(3)} is available";
+        UpdateBar.Message = $"You have {Updater.Current.ToString(3)}. Updating downloads about {_update.Size / 1_000_000} MB and restarts the app.";
+        UpdateNotes.NavigateUri = new Uri(_update.PageUrl);
+        UpdateBar.IsOpen = true;
+    }
+
+    async void Update_Click(object sender, RoutedEventArgs e)
+    {
+        if (_update == null) return;
+        UpdateButton.IsEnabled = false;
+        UpdateBar.IsClosable = false;
+        UpdateBar.Severity = InfoBarSeverity.Success;
+        UpdateProgress.Value = 0;
+        UpdateProgress.Visibility = Visibility.Visible;
+        UpdateBar.Message = "Downloading…";
+        var progress = new Progress<double>(f =>
+        {
+            UpdateProgress.Value = f;
+            UpdateBar.Message = $"Downloading… {f:P0}";
+        });
+        try
+        {
+            await Updater.DownloadAsync(_update, progress);
+            UpdateBar.Message = "Restarting…";
+            _engine?.Dispose();     // before the swap script starts, so it can't hold the engine open
+            _engine = null;
+            Updater.SwapAndRestart();
+        }
+        catch (Exception ex)
+        {
+            UpdateProgress.Visibility = Visibility.Collapsed;
+            UpdateButton.IsEnabled = true;
+            UpdateBar.IsClosable = true;
+            UpdateBar.Severity = InfoBarSeverity.Error;
+            UpdateBar.Message = $"The update didn't install ({ex.Message}). You can download it from the release page under What's new.";
+            if (_engine == null) _ = StartAsync();
+            return;
+        }
+        Application.Current.Exit();
+    }
 
     // ---------- Blender ----------
 

@@ -14,6 +14,8 @@ The one thing it doesn't bring along is [Blender](https://www.blender.org/downlo
 
 Windows SmartScreen will probably complain the first time because the exe isn't code-signed. Click *More info*, then *Run anyway*.
 
+Every time you open the app it checks GitHub for a newer version. If there is one, a bar at the top says so. Click **Update now** and it downloads the new exe, swaps it in and restarts.
+
 The first launch takes a little longer than usual:
 
 1. It unpacks its tools into `%LOCALAPPDATA%\sc-sandbox\tools`. That takes a few seconds and only happens once per version.

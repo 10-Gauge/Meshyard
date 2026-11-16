@@ -71,6 +71,22 @@
                     </Grid>
 
                     <StackPanel Grid.Row="1" Spacing="8">
+                    <!-- a newer release on GitHub (checked each time the app opens) -->
+                    <InfoBar x:Name="UpdateBar" Severity="Success" IsClosable="True"
+                             Title="A new version is available">
+                        <InfoBar.Content>
+                            <StackPanel Spacing="8" Margin="0,0,0,12">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="UpdateButton" Content="Update now" Click="Update_Click"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            ToolTipService.ToolTip="Download the new version and restart the app" />
+                                    <HyperlinkButton x:Name="UpdateNotes" Content="What's new" />
+                                </StackPanel>
+                                <ProgressBar x:Name="UpdateProgress" Maximum="1" Visibility="Collapsed" />
+                            </StackPanel>
+                        </InfoBar.Content>
+                    </InfoBar>
+
                     <InfoBar x:Name="ToolsBar" Severity="Warning" IsClosable="False"
                              Title="Game tools needed"
                              Message="StarBreaker and cgf-converter read the game files. They're free and download in a minute.">
