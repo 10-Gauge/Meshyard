@@ -326,6 +326,7 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
                 out.unlink(missing_ok=True)  # the pose was worked out again since
         except (OSError, AttributeError, TypeError):
             pass
+        pose = None
         if not (out.exists() and out.stat().st_mtime >= glb.stat().st_mtime):
             try:
                 pose = pose_for(install, settings, asset, log, kind=kind)
@@ -343,7 +344,8 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
                 raise
             tmp.replace(out)
         try:
-            for name, mv in (pose_for(install, settings, asset, lambda *_: None, kind=kind)["blender"]["objects"]).items():
+            pose = pose or pose_for(install, settings, asset, lambda *_: None, kind=kind)
+            for name, mv in (pose["blender"].get("objects") or {}).items():
                 moved_before[name] = mv["posed"]
         except (NoPose, tools.ToolError, KeyError, TypeError):
             pass

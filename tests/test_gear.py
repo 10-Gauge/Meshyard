@@ -123,13 +123,14 @@ def test_posed_glb_stacks_gear_and_weapons_and_names_the_missing_pose(tmp_path, 
         return wpose
 
     monkeypatch.setattr(gear, "pose_for", fake_pose)
-    monkeypatch.setattr(gear, "apply_pose", lambda g, o, p, log=print, hide_gear=True:
+    monkeypatch.setattr(gear, "apply_pose", lambda g, o, p, log=print, hide_gear=True, skip=None:
                         (__import__("shutil").copyfile(g, o), 1)[1])
     out = gear.posed_glb(None, {}, {"record": "X"}, "preview", gear_up=True, weapons="out", log=lambda *_: None)
     # raising the gear also works out the landed shape, once
     assert out.name == "ship.preview-l.gearup.wout.glb" and calls == ["landed", "gear", "weapons_out"]
+    calls.clear()
     assert gear.posed_glb(None, {}, {"record": "X"}, "preview", gear_up=True, weapons="out") == out  # cached
-    assert calls == ["landed", "gear", "weapons_out"]
+    assert "landed" not in calls   # the landed shape is known: not worked out again
     try:
         gear.posed_glb(None, {}, {"record": "X"}, "preview", vtol=True, log=lambda *_: None)
         raise AssertionError("expected NoPose")
