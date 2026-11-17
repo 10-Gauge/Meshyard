@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meshyard"
-version = "1.7.0"
+version = "1.7.1"
 description = "Meshyard: offline game asset browser, Blender sandbox and 3D-print exporter for CryEngine game data"
 readme = "README.md"
 requires-python = ">=3.10"

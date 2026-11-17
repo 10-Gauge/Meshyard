@@ -454,6 +454,9 @@ function blank(m) {
   const gen = (attrs.find((a) => a.name === "StringGenMask") || {}).value || "";
   // the HUD the game projects in front of the pilot: only its pixel grid comes through
   if ((attrs.find((a) => a.name === "Shader") || {}).value === "UIPlane") return true;
+  // the hull's insides the game shows only once it's shot through (the Railen's mirror-like
+  // damage structure sits right under its skin and showed through as glitter)
+  if (/(^|_)damage_internal/i.test(m.userData.source_name || m.name || "")) return true;
   return !m.userData.diffuse_tex && /%STENCIL_MAP|%USE_RTT_UV_FOR_DIFFUSE/.test(gen);
 }
 

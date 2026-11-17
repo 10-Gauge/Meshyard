@@ -139,3 +139,41 @@ def test_livery_slots_fall_back_to_position_for_renamed_submaterials():
     liv = [("Glass", "g"), ("--", "x"), ("--", "y"), ("Paint_Base", "p"), ("Trim_Paint_Panel_Base", "t")]
     out = paints._match_livery(base, liv)
     assert out["Paint_Base"] == "p" and out["Painted_Panel_Dark"] == "t"   # slot 4, past the repeats
+
+
+def test_livery_only_parts_are_found_and_grafted_under_their_node():
+    import struct
+    base = {"Decal_Emblem_Diff": {"activation_state": {"state": "inactive"}}, "Hull": {}}
+    liv = {"Decal_Emblem_Diff": {"activation_state": {"state": "active"}}, "Hull": {}}
+    assert paints._activated(base, liv) == ["Decal_Emblem_Diff"]
+    doc = {"nodes": [{"name": "Nose"}], "meshes": [], "buffers": [{"byteLength": 0}],
+           "materials": [{"name": "idris_frigate_exterior_wip_mtl_Decal_Emblem_Diff_059",
+                          "extras": {"source_name": "Decal_Emblem_Diff"}}]}
+    part = {"object": "Nose", "material": "Decal_Emblem_Diff", "positions": [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+            "normals": [[0, 0, 1]] * 3, "uv0": [[0, 0], [1, 0], [0, 1]], "uv1": [[0, 0]] * 3, "triangles": [[0, 1, 2]]}
+    bin_, n = paints.graft_faces(doc, b"", [part, dict(part, object="Missing")], "idris_frigate_exterior_wip_mtl_")
+    assert n == 1 and doc["nodes"][0]["children"] == [1]
+    prim = doc["meshes"][0]["primitives"][0]
+    assert prim["material"] == 0 and set(prim["attributes"]) >= {"POSITION", "NORMAL", "TEXCOORD_0"}
+    uv = doc["accessors"][prim["attributes"]["TEXCOORD_0"]]
+    off = doc["bufferViews"][uv["bufferView"]]["byteOffset"]
+    assert struct.unpack_from("<2f", bin_, off + 16) == (0.0, 0.0)   # v flipped: (0, 1) -> (0, 0)
+
+
+def test_fleck_stencils_color_the_marked_areas_and_make_them_metal(tmp_path):
+    import io
+
+    import numpy as np
+    from PIL import Image
+    mask = np.zeros((4, 4, 4), np.uint8)
+    mask[..., 3] = 255
+    mask[:2, :, 0] = 255                  # top half marked
+    Image.fromarray(mask, "RGBA").save(tmp_path / "m.png")
+    sm = {"public_params": {"StencilTintOverride": 0, "StencilSpecularColor": "0.85,0.11,0.41",
+                            "StencilOpacity": 1}}
+    colors, opacity = paints._stencil_specs(sm)
+    col, mr = paints.stencil_flecks(tmp_path / "m.png", [0.03, 0.03, 0.03, 1], colors, opacity)
+    c = np.asarray(Image.open(io.BytesIO(col)))
+    m = np.asarray(Image.open(io.BytesIO(mr)))
+    assert c[0, 0, 0] > 200 and c[3, 0, 0] < 60          # pink flecks over dark paint
+    assert m[0, 0, 2] == 255 and m[3, 0, 2] == 0         # metal only where marked
