@@ -337,6 +337,62 @@ def apply_overrides(parts, opts: PrintOptions, log=print):
     return kept
 
 
+_parts_cache: dict = {}
+
+
+def _cached_parts(glb: Path, exclude: list[str]):
+    """load_parts, kept for the last couple of models: moving the peg asks again and
+    again about the same model. Returns copies (posing and scaling change them)."""
+    key = (str(glb), glb.stat().st_mtime_ns, tuple(exclude or ()))
+    if key not in _parts_cache:
+        if len(_parts_cache) >= 2:
+            _parts_cache.pop(next(iter(_parts_cache)))
+        _parts_cache[key] = load_parts(glb, exclude)
+    return [(n, m.copy()) for n, m in _parts_cache[key]]
+
+
+# the peg preview works on a coarser grid than the print: same choice of spot, seconds not minutes
+PEG_PREVIEW_VOXEL_MM = 1.0
+PEG_PREVIEW_MAX_VOXELS = 8_000_000
+
+
+def peg_preview(glb: Path, opts: PrintOptions, log=print) -> dict:
+    """Where the stand's peg will go, in the model's own coordinates (the viewer's), for
+    the current print settings: the same pick as the print (plan_stand), on a coarser grid.
+    Returns {"top": [x, y, z] where the post meets the model, "peg_r", "post_r", "depth"
+    (meters), "stand"}, or {"stand": "none"}."""
+    if opts.stand == "none":
+        return {"stand": "none"}
+    parts = _cached_parts(Path(glb), opts.exclude_nodes)
+    # a marker inside the model's box, carried through the same turn and scaling, gives
+    # the print-to-model transform without re-deriving it
+    lo, hi = _bounds(parts)
+    c = (lo + hi) / 2
+    probe = np.array([c, c + [0.01, 0, 0], c + [0, 0.01, 0], c + [0, 0, 0.01]])
+    marker = trimesh.Trimesh(vertices=probe.copy(), faces=[[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]], process=False)
+    parts.append(("__peg_probe__", marker))
+    _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale)
+    moved = np.asarray(parts.pop()[1].vertices, float)
+    if opts.scale > 0:
+        plo, phi = _bounds(parts)
+        opts = replace(opts, size_mm=float(np.max(phi - plo)))
+    parts = apply_overrides(parts, opts, log)
+    coarse = replace(opts, voxel_mm=max(opts.voxel_mm, PEG_PREVIEW_VOXEL_MM),
+                     max_voxels=min(opts.max_voxels, PEG_PREVIEW_MAX_VOXELS))
+    g = voxelize(parts, coarse, extra_mm=0.0, log=lambda *_: None)
+    spec = plan_stand(g, opts, log=lambda *_: None)
+    # model = A @ (print - t): solve the linear part from the probe's three edges
+    A_print = (moved[1:] - moved[0]).T          # print-space edges
+    A_model = (probe[1:] - probe[0]).T          # model-space edges
+    to_model = A_model @ np.linalg.inv(A_print)
+    top = probe[0] + to_model @ (np.array([spec.x, spec.y, spec.top_z]) - moved[0])
+    mm = float(np.linalg.norm(to_model @ np.array([1.0, 0, 0])))  # meters per print mm
+    return {"stand": opts.stand, "top": [round(float(v), 4) for v in top],
+            "peg_r": round(spec.peg_r * mm, 4), "post_r": round(spec.post_r * mm, 4),
+            "depth": round(spec.peg_depth * mm, 4),
+            "down": [round(float(v), 4) for v in to_model @ np.array([0, 0, -1.0]) / mm]}
+
+
 def measure(glb: Path, exclude: list[str]) -> dict:
     """The model's real size in game meters (the parts a print would keep)."""
     real = real_size(load_parts(Path(glb), exclude))

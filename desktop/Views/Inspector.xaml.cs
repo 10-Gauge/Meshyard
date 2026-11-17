@@ -209,6 +209,7 @@ public sealed partial class Inspector : UserControl
             {
                 await s.Viewer.Show(s.Api.Url(url));
                 _ = Measure(t, variant);
+                RefreshPeg(0);
             }
         }
         catch (Exception e)
@@ -298,6 +299,7 @@ public sealed partial class Inspector : UserControl
         if (_syncingSize) return;
         if (!double.IsNaN(ScaleBox.Value)) SetSizeBy("scale");
         SyncSize();
+        RefreshPeg();  // the peg's size and the offsets' reach follow the print size
     }
 
     void Size_Changed(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -305,6 +307,7 @@ public sealed partial class Inspector : UserControl
         if (_syncingSize) return;
         SetSizeBy("size");
         SyncSize();
+        RefreshPeg();
     }
 
     void SetSizeBy(string by)
@@ -347,7 +350,47 @@ public sealed partial class Inspector : UserControl
 
     static double Safe(double v) => double.IsNaN(v) ? 0 : v;
 
-    void Stand_Changed(object sender, SelectionChangedEventArgs e) => UpdateStand();
+    void Stand_Changed(object sender, SelectionChangedEventArgs e) { UpdateStand(); RefreshPeg(); }
+
+    void Peg_Changed(NumberBox sender, NumberBoxValueChangedEventArgs args) => RefreshPeg();
+
+    // Where the stand's peg will go with the current settings, drawn in the viewer so the
+    // Peg forward / Peg right offsets can be set before exporting. Asked again (after a
+    // short pause) whenever a setting that moves it changes.
+    CancellationTokenSource? _pegCts;
+    int _pegSeq;
+
+    async void RefreshPeg(int delayMs = 600)
+    {
+        var s = _state;
+        var t = s?.Selected;
+        _pegCts?.Cancel();
+        var cts = _pegCts = new CancellationTokenSource();
+        var seq = ++_pegSeq;
+        try { await Task.Delay(delayMs, cts.Token); } catch (TaskCanceledException) { return; }
+        if (s == null || t == null || seq != _pegSeq) return;
+        if (Picked(StandBox) == "none")
+        {
+            PegNote.Text = "";
+            await s.Viewer.Peg(null);
+            return;
+        }
+        PegNote.Text = "Finding where the peg goes…";
+        try
+        {
+            var job = await s.Api.StartJobAsync("api/print/peg",
+                Request(t, new JsonObject { ["variant"] = _variant, ["options"] = PrintOptions() }));
+            var r = await s.Jobs.RunAsync(job, quiet: true);
+            if (seq != _pegSeq || s.Selected != t) return;
+            var shown = r["top"] != null;
+            await s.Viewer.Peg(shown ? r : null);
+            PegNote.Text = shown ? "The peg is shown in orange in the viewer." : "";
+        }
+        catch
+        {
+            if (seq == _pegSeq) PegNote.Text = "";
+        }
+    }
 
     void UpdateStand()
     {

@@ -41,6 +41,7 @@
     clear: (text) => { v.clear(); v.message(text || ""); },
     message: (text, corner) => v.message(text, !!corner),
     reset: () => v.resetView(),
+    peg: (p) => v.setPeg(p),
     theme: (dark) => { document.documentElement.classList.toggle("light", !dark); v.setTheme(dark); },
   };
   const params = new URLSearchParams(location.search);

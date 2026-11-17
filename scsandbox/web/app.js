@@ -17,8 +17,36 @@ function viewerMsg(text, corner = false) {
   m.textContent = text;
   m.style.placeItems = corner ? "end start" : "center";
 }
-const viewer = createViewer($("viewer"), { onMessage: viewerMsg });
+const viewer = createViewer($("viewer"), {
+  onMessage(text, corner) {
+    viewerMsg(text, corner);
+    if (corner && /×/.test(text)) refreshPeg();  // a model just finished loading
+  },
+});
 const showModel = (url) => viewer.show(url);
+
+// ---------- peg preview ----------
+// Where the stand's peg will go with the current print settings, drawn in the viewer,
+// so Peg forward / Peg right can be set before exporting.
+let pegTimer = null, pegSeq = 0;
+function refreshPeg(delay = 0) {
+  clearTimeout(pegTimer);
+  pegTimer = setTimeout(async () => {
+    const a = state.selected, seq = ++pegSeq;
+    if (!a || $("p-stand").value === "none" || !viewer.loaded) {
+      viewer.setPeg(null); $("p-pegnote").textContent = ""; return;
+    }
+    $("p-pegnote").textContent = "Finding where the peg goes…";
+    try {
+      const { job } = await api("/api/print/peg", { channel: state.channel, ...target(a), variant: state.variant || "preview", options: printOptions() });
+      trackJob(job, (r) => {
+        if (seq !== pegSeq || state.selected !== a) return;
+        viewer.setPeg(r.top ? r : null);
+        $("p-pegnote").textContent = r.top ? "Peg shown in orange in the viewer." : "";
+      }, () => { if (seq === pegSeq) $("p-pegnote").textContent = ""; });
+    } catch (e) { $("p-pegnote").textContent = ""; }
+  }, delay);
+}
 
 // ---------- jobs ----------
 function trackJob(id, onDone, onError) {
@@ -270,6 +298,8 @@ function updateMinMm() {
   for (const id of ["p-standtext", "p-standtext2", "p-logo"]) $(id).disabled = noStand || $("p-standshape").value !== "rect";
 }
 for (const id of ["p-nozzle", "p-minn", "p-stand", "p-standshape"]) $(id).addEventListener("input", updateMinMm);
+// settings that move the peg: show where it goes now
+for (const id of ["p-stand", "p-standfwd", "p-standside", "p-size", "p-tilt"]) $(id).addEventListener("input", () => refreshPeg(600));
 
 function printOptions() {
   const o = { mode: $("p-mode").value, format: $("p-format").value, stand: $("p-stand").value, thicken: $("p-thicken").checked,

@@ -371,3 +371,20 @@ def test_solid_glow_trim_prints_but_flat_glow_sheets_do_not(tmp_path):
     sc.export(glb)
     names = {n for n, _ in printprep.load_parts(glb, [])}
     assert "glow_thruster_main" in names and "glow_strip" not in names
+
+
+def test_peg_preview_is_under_the_model_in_its_own_coordinates(tmp_path):
+    # a 10 x 2 x 4 m slab (glTF: y up, so 2 m tall), centred 3 m off the origin in x
+    slab = trimesh.creation.box(extents=[10, 2, 4])
+    slab.apply_translation([3, 5, 0])
+    path = tmp_path / "slab.glb"
+    trimesh.Scene(slab).export(path)
+    r = printprep.peg_preview(path, printprep.PrintOptions(stand="peg", size_mm=100))
+    x, y, z = r["top"]
+    assert abs(x - 3) < 0.3 and abs(z) < 0.3          # under the middle
+    assert abs(y - 4) < 0.3                           # on the underside (5 - 2/2)
+    assert np.allclose(r["down"], [0, -1, 0], atol=1e-6)
+    assert 0 < r["peg_r"] < r["post_r"] < 1           # sizes in meters at 1:100
+    moved = printprep.peg_preview(path, printprep.PrintOptions(stand="peg", size_mm=100, stand_side_mm=20))
+    assert moved["top"][0] != x                       # the offset moves it
+    assert printprep.peg_preview(path, printprep.PrintOptions(stand="none"))["stand"] == "none"

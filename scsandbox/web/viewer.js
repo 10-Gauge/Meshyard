@@ -41,7 +41,7 @@ export function createViewer(el, { onMessage } = {}) {
   let gridColors = [0x888888, 0x555555];
   let grid = new THREE.GridHelper(10, 10, ...gridColors);
   scene.add(grid);
-  let current = null, gridSize = 10, gridDivs = 10, home = null, loadSeq = 0;
+  let current = null, gridSize = 10, gridDivs = 10, home = null, loadSeq = 0, loading = false;
   camera.position.set(7, 4.5, 8.5);  // until a model frames the view
   controls.target.set(0, 0.5, 0);
 
@@ -85,6 +85,7 @@ export function createViewer(el, { onMessage } = {}) {
   function clear() {
     loadSeq++;
     if (current) { scene.remove(current); current = null; }
+    loading = false; pendingPeg = null; peg = null;
     redraw();
   }
 
@@ -97,9 +98,11 @@ export function createViewer(el, { onMessage } = {}) {
 
   function show(url) {
     const seq = ++loadSeq;
+    loading = true; pendingPeg = null;
     message("Loading model…");
     new GLTFLoader().load(url, (gltf) => {
       if (seq !== loadSeq) return;  // a newer request replaced this one
+      loading = false;
       if (current) scene.remove(current);
       current = gltf.scene;
       // Ships carry their in-game light fixtures (77 on a Gladius, 5000+ on an Idris). three.js
@@ -139,6 +142,8 @@ export function createViewer(el, { onMessage } = {}) {
       current.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
       scene.add(current);
       const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+      floorY = box.min.y;
+      peg = null;
       const r = Math.max(size.x, size.y, size.z) || 1;
       current.position.sub(new THREE.Vector3(center.x, box.min.y, center.z));
       const step = Math.pow(10, Math.floor(Math.log10(r)));
@@ -158,8 +163,44 @@ export function createViewer(el, { onMessage } = {}) {
       renderer.shadowMap.needsUpdate = true;
       redraw();
       message(`${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)} m`, true);
+      if (pendingPeg) { const p = pendingPeg; pendingPeg = null; setPeg(p); }
     }, (p) => { if (seq === loadSeq && p.total) message(`Downloading model… ${Math.round(100 * p.loaded / p.total)}%`); },
-    (err) => { if (seq === loadSeq) message("Could not load model: " + (err.message || err)); });
+    (err) => { if (seq === loadSeq) { loading = false; message("Could not load model: " + (err.message || err)); } });
+  }
+
+  // Where the print's stand peg will go (from /api/print/peg): the socket drawn in
+  // orange through the hull, the post down to the floor in see-through blue.
+  let peg = null, floorY = 0, pendingPeg = null;
+  function setPeg(p) {
+    if (loading) { pendingPeg = p; return; }  // drawn once the model is in
+    if (peg) { peg.removeFromParent(); peg = null; }
+    if (!p || !p.top || !current) { redraw(); return; }
+    peg = new THREE.Group();
+    const top = new THREE.Vector3(...p.top);
+    const up = new THREE.Vector3(...(p.down || [0, -1, 0])).negate().normalize();
+    const along = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
+    const socket = new THREE.Mesh(new THREE.CylinderGeometry(p.peg_r, p.peg_r, p.depth, 32),
+      new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.85, depthTest: false }));
+    socket.quaternion.copy(along);
+    socket.position.copy(top).addScaledVector(up, p.depth / 2);
+    socket.renderOrder = 10;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(p.peg_r * 1.6, p.peg_r * 0.18, 12, 48),
+      new THREE.MeshBasicMaterial({ color: 0xff7a1a, depthTest: false }));
+    ring.quaternion.copy(along).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
+    ring.position.copy(top);
+    ring.renderOrder = 11;
+    peg.add(socket, ring);
+    if (p.stand === "peg" || p.stand === "attached") {
+      const h = Math.max(0, top.y - floorY);
+      if (h > 0) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(p.post_r, p.post_r, h, 32),
+          new THREE.MeshBasicMaterial({ color: 0x3aa0ff, transparent: true, opacity: 0.35, depthWrite: false }));
+        post.position.set(top.x, top.y - h / 2, top.z);
+        peg.add(post);
+      }
+    }
+    current.add(peg);
+    redraw();
   }
 
   function setTheme(dark) {
@@ -167,7 +208,7 @@ export function createViewer(el, { onMessage } = {}) {
     setGrid(gridSize, gridDivs);
   }
 
-  renderer.domElement.addEventListener("dblclick", resetView);  return { show, clear, resetView, setTheme, message };
+  renderer.domElement.addEventListener("dblclick", resetView);  return { show, clear, resetView, setTheme, message, setPeg, get loaded() { return !!current; } };
 }
 
 const MERGE_MIN_MESHES = 300;

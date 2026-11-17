@@ -256,6 +256,19 @@ class App:
             return printprep.analyze(glb, po)
         return self.submit(f"Find thin parts: {name}", fn)
 
+    def job_peg(self, channel: str, b: dict, opts: dict):
+        """Where the stand peg will go for these print settings, on the model the viewer
+        shows (same coordinates), so it can be drawn before exporting."""
+        inst = self.install(channel)
+        name, glb_for, _, _ = self._target(inst, b)
+        opts = {k: v for k, v in opts.items() if k != "stand_logo"}
+        po = printprep.PrintOptions.from_settings(self.settings, **opts)
+        variant = b.get("variant") if b.get("variant") in ("preview", "full") else "preview"
+
+        def fn(log):
+            return printprep.peg_preview(Path(glb_for(variant, log)), po, log)
+        return self.submit(f"Peg position: {name}", fn)
+
     def job_measure(self, channel: str, b: dict):
         """The model's real size in meters, for turning a scale into a print size and back.
         Measures the model the viewer already has; the answer is kept beside the file."""
@@ -512,6 +525,8 @@ def make_handler(app: App):
                     return self.json({"job": app.job_print(b.get("channel"), b, print_opts(b))})
                 if p == "/api/print/measure":
                     return self.json({"job": app.job_measure(b.get("channel"), b)})
+                if p == "/api/print/peg":
+                    return self.json({"job": app.job_peg(b.get("channel"), b, print_opts(b))})
                 if p == "/api/print/analyze":
                     return self.json({"job": app.job_analyze(b.get("channel"), b, print_opts(b))})
                 if p == "/api/export":
