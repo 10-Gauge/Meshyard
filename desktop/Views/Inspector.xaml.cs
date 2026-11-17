@@ -650,7 +650,7 @@ public sealed partial class Inspector : UserControl
             {
                 // the closest Bambu PLA Basic color names the spool to load in each slot
                 var names = r.Items("color_names").Select(c => c.GetValue<string>()).ToList();
-                parts.Add("painted for Bambu Studio, filaments " + string.Join(", ", colors.Select((c, i) =>
+                parts.Add("painted for Bambu Studio (import it into a project with Ctrl+I to match the colors to your filaments), colors " + string.Join(", ", colors.Select((c, i) =>
                     i < names.Count ? $"{i + 1} {c} ({names[i]})" : $"{i + 1} {c}")));
             }
             var files = r.Items("files").Select(f => f.GetValue<string>()).ToList();

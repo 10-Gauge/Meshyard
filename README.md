@@ -72,7 +72,7 @@ Click **Export printable file** and you get a single watertight 3MF or STL that 
 
 **Detail** is the mesh resolution: 0.2 mm is a good default, 0.1 mm suits resin, and 0.3 to 0.4 mm is fine for a quick FDM print. Very large models keep up to 4 million triangles so panel lines and edges stay sharp.
 
-**Paint colors** (3MF only) paints the print for a multi-color printer. Pick how many filaments you have, from 2 to 16, and the export colors every surface from the model: hull, trim, canopy and markings, reduced to that many colors. Bambu Studio opens it already painted, with filaments 1 to N assigned; the app lists which color goes in which slot and names the closest Bambu PLA Basic color for each, so you know which spool to load. Pick a **Paint** first and the print comes out in that livery.
+**Paint colors** (3MF only) paints the print for a multi-color printer. Pick how many filaments you have, from 2 to 16, and the export colors every surface from the model: hull, trim, canopy and markings, reduced to that many colors. In Bambu Studio, import it into a project (File > Import, or Ctrl+I) and Bambu offers to match its colors to your filaments. Opening it as a project instead brings it in without the colors. The app lists the colors and names the closest Bambu PLA Basic color for each, so you know which spools to load. Pick a **Paint** first and the print comes out in that livery.
 
 Some other options worth knowing:
 
@@ -89,7 +89,7 @@ Some other options worth knowing:
 
 ![An example export of the ship above as a pre-painted Bambu 3MF: the ship in its filament colors and the separate black stand with the white logo and name, side by side on the build plate](docs/images/painted-3mf.png)
 
-*An example export of the model shown on its stand above, with the same settings. It's a Bambu 3MF that comes pre-painted: the model is split into four filament colors taken from the livery picked in the **Paint** list (here the stock paint), and the stand prints in black with the logo and name in white. Open it in Bambu Studio and the painting is already done, with each color assigned to a filament slot. Exported at 150 mm (1:142).*
+*An example export of the model shown on its stand above, with the same settings. It's a Bambu 3MF that comes pre-painted: the model is split into four filament colors taken from the livery picked in the **Paint** list (here the stock paint), and the stand prints in black with the logo and name in white. Import it into a Bambu Studio project and Bambu matches each color to a filament. Exported at 150 mm (1:142).*
 
 - **Hollow walls** for resin prints. Remember to add drain holes in your slicer.
 - **Separate parts (kit)** gives you every part as its own body instead of one solid, for painting or building it up like a model kit.
