@@ -1070,6 +1070,7 @@ def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
     need = int(math.ceil((peg_depth + 1.0) / g.pitch))
     step = max(1, rad // 40)
     side_w = 1.0 if opts.figure else 3.0
+    front_w = 0.0 if opts.figure else 1.0
     for i in range(max(cx - rad, 0), min(cx + rad + 1, g.shape[0]), step):
         for j in range(max(cy - rad, 0), min(cy + rad + 1, g.shape[1]), step):
             if low[i, j] < 0:
@@ -1086,7 +1087,7 @@ def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
             # of mass (as moved), then low
             steep = rise[i, j] * g.pitch > post_r or drop[i, j] * g.pitch > 1.0
             score = (1e6 if gap >= need else gap * 100) - (3e6 if steep else 0) \
-                - d * 10 - low[i, j] * g.pitch
+                - d * 10 - low[i, j] * g.pitch + (cy - j) * g.pitch * front_w  # ties: the front side
             if score > best_score:
                 best, best_score = (i, j), score
     i, j = best
