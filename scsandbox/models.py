@@ -20,13 +20,15 @@ from .installs import Install
 
 VARIANTS = {
     # variant: (command, lod)
-    "preview": ("export_entity_preview", "2"),
+    "preview": ("export_entity_preview", "1"),
     "full": ("export_entity", "0"),
     "print": ("export_entity_print", "0"),
 }
 # Cache file tag per variant; bump when a variant's export settings change.
 FILE_TAG = {"print": "print-m",     # print-m: exported with material names
-            "preview": "preview-l"}  # preview-l: light (small textures, no lights)
+            "preview": "preview-d"}  # preview-d: LOD 1, eighth-size textures, no lights
+# Past this the viewer model is exported again lighter (LOD 2, sixteenth-size textures).
+PREVIEW_MAX_BYTES = 250 * 2**20
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 
@@ -56,9 +58,13 @@ def glb_for(install: Install, settings: dict, asset: dict, variant: str = "previ
                 if "fps_weapons" in (asset.get("subcategory") or ""):
                     complete_weapon(out, install, settings, asset, log)
                 place_interiors(out, install, asset, log)
+                fix_interior_hulls(out, log)
+                fix_floating_parts(out, log)
                 reattach_orphans(out, log)
+                fix_port_parts(out, log)
                 fix_tagged_geometry(out, install, settings, log)
                 drop_empty_meshes(out, log)
+                fix_borrowed_meshes(out, log)
                 fix_item_meshes(out, log)
             return out
         errors = []
@@ -66,13 +72,22 @@ def glb_for(install: Install, settings: dict, asset: dict, variant: str = "previ
             command, lod = VARIANTS[variant]
             try:
                 tools.run(settings, command, install, name=asset["record"], out=str(out), lod=lod)
+                if variant == "preview" and out.exists() and out.stat().st_size > PREVIEW_MAX_BYTES:
+                    # capital ships (Idris, Javelin) at this detail are too heavy for the
+                    # viewer: use the distance mesh and smaller textures ("Full detail" has all)
+                    log("large ship: using a lighter viewer model")
+                    tools.run(settings, "export_entity_preview_light", install, name=asset["record"], out=str(out), lod="2")
                 if out.exists() and "fps_weapons" in (asset.get("subcategory") or ""):
                     complete_weapon(out, install, settings, asset, log)
                 if out.exists():
                     place_interiors(out, install, asset, log)
+                    fix_interior_hulls(out, log)
+                    fix_floating_parts(out, log)
                     reattach_orphans(out, log)
+                    fix_port_parts(out, log)
                     fix_tagged_geometry(out, install, settings, log)
                     drop_empty_meshes(out, log)
+                    fix_borrowed_meshes(out, log)
                     fix_item_meshes(out, log)
                     return out
                 errors.append("StarBreaker finished but wrote no file")
@@ -388,6 +403,274 @@ def drop_empty_meshes(glb: Path, log=print) -> int:
     return removed
 
 
+# an exterior model this big inside an interior is a whole hull, not a prop
+HULL_FACES = 20_000
+
+
+def drop_interior_hulls(doc: dict) -> int:
+    """Unhook whole ship hulls StarBreaker drops into an interior.
+
+    The Guardian MX's interior lists 22 pieces StarBreaker can't resolve, and each
+    comes out as the base Guardian's entire exterior ("Exterior/mrai_guardian.cga",
+    420,000 faces) at the piece's spot, so the ship showed five or so hulls stacked
+    inside each other. Interiors never carry an exterior model that big. Returns
+    references removed."""
+    nodes, meshes, acc = doc.get("nodes", []), doc.get("meshes", []), doc.get("accessors", [])
+
+    def faces(m):
+        return sum(acc[p["indices"]]["count"] // 3 for p in meshes[m].get("primitives", [])
+                   if "indices" in p and p["indices"] < len(acc))
+
+    removed = 0
+    for nd in nodes:
+        if not nd.get("name", "").lower().startswith("interior_"):
+            continue
+        todo, seen = list(nd.get("children", [])), set()
+        while todo:
+            k = todo.pop()
+            if k in seen or k >= len(nodes):
+                continue
+            seen.add(k)
+            todo += nodes[k].get("children", [])
+            m = nodes[k].get("mesh")
+            if m is None or m >= len(meshes):
+                continue
+            name = meshes[m].get("name", "").replace("\\", "/").lower()
+            if "/exterior/" in name and faces(m) > HULL_FACES:
+                del nodes[k]["mesh"]
+                removed += 1
+    return removed
+
+
+def stray_limit(dist) -> float:
+    """How far from a model's middle a part can sit and still belong to it: stray parts
+    are a few odd ones beyond a clear gap. A long ship's engines (the Javelin's, 200 m
+    back) run on continuously from the hull and stay in. Same rule as the viewer's."""
+    import numpy as np
+    d = np.sort(np.asarray(dist, dtype=float))
+    if len(d) < 20:
+        return float("inf")
+    start = int(len(d) * 0.9)
+    gap = max(2.0, 0.25 * d[start])
+    for i in range(max(start, 1), len(d)):
+        if d[i] - d[i - 1] > gap:
+            return float(d[i - 1]) + 1e-6
+    return float("inf")
+
+
+def drop_stray_interior_parts(doc: dict) -> int:
+    """Unhook interior pieces StarBreaker places far outside the ship: a Carrack panel
+    sits 100 m off to the side, a Tiburon one 180 m away. They framed the ship as a
+    speck and shrank prints. Only interior pieces, and only beyond a clear gap from
+    the rest of the model. Returns references removed."""
+    import numpy as np
+    nodes = doc.get("nodes", [])
+    parent = {}
+    for i, nd in enumerate(nodes):
+        for c in nd.get("children", []):
+            parent.setdefault(c, i)
+    cache: dict = {}
+
+    def world(i, depth=0):
+        if i not in cache:
+            p = parent.get(i)
+            up = world(p, depth + 1) if p is not None and depth < 200 else np.eye(4)
+            cache[i] = up @ _node_matrix(nodes[i])
+        return cache[i]
+
+    def inside(i):
+        k, n = i, 0
+        while k is not None and n < 200:
+            if nodes[k].get("name", "").lower().startswith("interior_"):
+                return True
+            k, n = parent.get(k), n + 1
+        return False
+
+    parts = [i for i, nd in enumerate(nodes) if "mesh" in nd]
+    if len(parts) < 20:
+        return 0
+    pos = np.array([world(i)[:3, 3] for i in parts])
+    mid = np.median(pos, axis=0)
+    dist = np.linalg.norm(pos - mid, axis=1)
+    limit = stray_limit(dist)
+    removed = 0
+    for i, d in zip(parts, dist):
+        if d > limit and inside(i):
+            del nodes[i]["mesh"]
+            removed += 1
+    return removed
+
+
+def _accessor(doc: dict, bin_: bytes, ai: int):
+    import numpy as np
+    a = doc["accessors"][ai]
+    bv = doc["bufferViews"][a["bufferView"]]
+    comp = {5126: np.float32, 5125: np.uint32, 5123: np.uint16, 5121: np.uint8}[a["componentType"]]
+    nc = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}[a["type"]]
+    start = bv.get("byteOffset", 0) + a.get("byteOffset", 0)
+    stride, isz = bv.get("byteStride", 0), np.dtype(comp).itemsize * nc
+    if stride and stride != isz:
+        raw = np.frombuffer(bin_, np.uint8, count=stride * (a["count"] - 1) + isz, offset=start)
+        return raw[np.arange(a["count"])[:, None] * stride + np.arange(isz)].copy().view(comp).reshape(a["count"], nc)
+    return np.frombuffer(bin_, comp, count=a["count"] * nc, offset=start).reshape(a["count"], nc)
+
+
+def part_boxes(doc: dict, bin_: bytes) -> list[tuple[int, object, object]]:
+    """(node, world min, world max) of every mesh node, measured on the vertices its
+    triangles use (parts share big vertex buffers)."""
+    import numpy as np
+    nodes, meshes = doc.get("nodes", []), doc.get("meshes", [])
+    parent = {}
+    for i, nd in enumerate(nodes):
+        for c in nd.get("children", []):
+            parent.setdefault(c, i)
+    cache: dict = {}
+
+    def world(i, depth=0):
+        if i not in cache:
+            p = parent.get(i)
+            cache[i] = (world(p, depth + 1) if p is not None and depth < 200 else np.eye(4)) @ _node_matrix(nodes[i])
+        return cache[i]
+
+    local: dict = {}
+    out = []
+    for i, nd in enumerate(nodes):
+        m = nd.get("mesh")
+        if m is None or m >= len(meshes):
+            continue
+        if m not in local:
+            pts = []
+            for p in meshes[m].get("primitives", []):
+                if "POSITION" not in p.get("attributes", {}):
+                    continue
+                pos = _accessor(doc, bin_, p["attributes"]["POSITION"])
+                if "indices" in p:
+                    pos = pos[np.unique(_accessor(doc, bin_, p["indices"]).ravel())]
+                pts.append(pos)
+            local[m] = np.concatenate(pts).astype(float) if pts else None
+        pts = local[m]
+        if pts is None or not len(pts):
+            continue
+        # a box's 8 corners are enough to place it
+        lo, hi = pts.min(0), pts.max(0)
+        corners = np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
+        w = world(i)
+        wc = corners @ w[:3, :3].T + w[:3, 3]
+        out.append((i, wc.min(0), wc.max(0)))
+    return out
+
+
+# parts this far apart (or 1% of the model's size, if more) don't touch
+FLOAT_GAP_M = 0.5
+
+
+def _touching_groups(lo, hi, gap: float):
+    """Label boxes that touch (within gap), directly or through others."""
+    import numpy as np
+    n = len(lo)
+    par = list(range(n))
+
+    def find(x):
+        while par[x] != x:
+            par[x] = par[par[x]]
+            x = par[x]
+        return x
+    a, b = lo - gap / 2, hi + gap / 2
+    active: list[int] = []
+    for i in np.argsort(a[:, 0]):
+        active = [j for j in active if b[j, 0] >= a[i, 0]]
+        if active:
+            act = np.array(active)
+            for j in act[np.all((a[act] <= b[i]) & (b[act] >= a[i]), axis=1)]:
+                ri, rj = find(int(i)), find(int(j))
+                if ri != rj:
+                    par[ri] = rj
+        active.append(int(i))
+    return np.array([find(i) for i in range(n)])
+
+
+def detached_parts(doc: dict, bin_: bytes) -> list[int]:
+    """Small groups of parts that touch nothing of the ship: an interior piece floating
+    above every Avenger, a Carrack panel 100 m off to the side, the Hyun's cooler 10 m
+    out, the 300 series' gear hinge, the Starlite's name plate. A group goes when it
+    holds under 5% of the parts and is under a fifth of the ship's size."""
+    import numpy as np
+    boxes = part_boxes(doc, bin_)
+    if len(boxes) < 20:
+        return []
+    lo = np.array([b[1] for b in boxes])
+    hi = np.array([b[2] for b in boxes])
+    size = float(np.linalg.norm(hi.max(0) - lo.min(0)))
+    lab = _touching_groups(lo, hi, max(FLOAT_GAP_M, 0.01 * size))
+    ids, counts = np.unique(lab, return_counts=True)
+    main = ids[np.argmax(counts)]
+    mm = lab == main
+    main_size = float(np.linalg.norm(hi[mm].max(0) - lo[mm].min(0)))
+    out = []
+    for g, c in zip(ids, counts):
+        if g == main:
+            continue
+        mem = np.where(lab == g)[0]
+        extent = float(np.linalg.norm(hi[mem].max(0) - lo[mem].min(0)))
+        if c < max(5, 0.05 * len(boxes)) and extent < 0.2 * main_size:
+            out += [boxes[k][0] for k in mem]
+    return out
+
+
+def fix_floating_parts(glb: Path, log=print) -> int:
+    """Drop parts floating free of the ship, once per model file (it reads the whole model)."""
+    mark = glb.with_name(glb.name + ".floating")
+    try:
+        if mark.exists() and mark.read_text().strip() == f"2:{glb.stat().st_mtime_ns}":
+            return 0
+    except OSError:
+        pass
+    try:
+        doc, bin_, _ = _read_glb(glb)
+        drop = set(detached_parts(doc, bin_))
+    except (OSError, ValueError, KeyError, IndexError) as e:
+        log(f"couldn't check {glb.name} for floating parts: {e}")
+        return 0
+    if drop:
+        def edit(d) -> bool:
+            for i in drop:
+                d["nodes"][i].pop("mesh", None)
+            return True
+        try:
+            _edit_glb_json(glb, edit)
+        except OSError:
+            glb.with_name(glb.name + ".tmp").unlink(missing_ok=True)
+            return 0
+        log(f"removed {len(drop)} part(s) floating free of the ship")
+    try:
+        mark.write_text(f"2:{glb.stat().st_mtime_ns}")
+    except OSError:
+        pass
+    return len(drop)
+
+
+def fix_interior_hulls(glb: Path, log=print) -> int:
+    removed = 0
+
+    def edit(doc) -> bool:
+        nonlocal removed
+        hulls = drop_interior_hulls(doc)
+        strays = 0  # far-off pieces go with the floating ones (fix_floating_parts)
+        removed = hulls + strays
+        if strays:
+            log(f"removed {strays} interior piece(s) placed far outside the ship")
+        return removed > 0
+
+    try:
+        _edit_glb_json(glb, edit)
+    except OSError:
+        glb.with_name(glb.name + ".tmp").unlink(missing_ok=True)
+        return 0
+    if removed:
+        log(f"removed {removed} stray copies of the hull from the interior")
+    return removed
+
+
 def reattach_orphans(glb: Path, log=print) -> int:
     """Hang loadout items that StarBreaker left out of the scene back on their hardpoint.
 
@@ -453,6 +736,99 @@ def reattach_orphans(glb: Path, log=print) -> int:
         log(f"couldn't update {glb.name} yet ({e.strerror}); it's repaired next time it's loaded")
         return 0
     return moved
+
+
+def _node_matrix(nd: dict):
+    import numpy as np
+    if "matrix" in nd:
+        return np.array(nd["matrix"], dtype=float).reshape(4, 4).T
+    x, y, z, w = nd.get("rotation", [0.0, 0.0, 0.0, 1.0])
+    r = np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                  [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                  [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+    m = np.eye(4)
+    m[:3, :3] = r * np.array(nd.get("scale", [1.0, 1.0, 1.0]))
+    m[:3, 3] = nd.get("translation", [0.0, 0.0, 0.0])
+    return m
+
+
+def mount_port_parts(doc: dict) -> list[tuple[str, str]]:
+    """Hang a modular weapon's parts on the ports of the weapon they belong to.
+
+    Ship guns are built from parts: the Ares Inferno's Behring gatling has a barrel,
+    firing mechanism, power array and ventilation, each mounted on a port of the gun
+    ("hardpoint_bar", "hardpoint_mec", "hardpoint_pow", "hardpoint_ven"). StarBreaker
+    puts each part at its port's position but hangs it on the ship with the ship's
+    rotation, not the port's. Where the gun is mounted rolled (the Ares's sits on its
+    side) the parts come out turned 90 degrees: the ventilation box stuck out beside the
+    gun instead of sitting inside its housing. A part is recognized by its port's name
+    inside its own model name ("behr_bal_gat_s7_ven_1" for "hardpoint_ven") and by
+    sitting exactly at the port. Returns (part, port) names moved."""
+    import numpy as np
+    nodes = doc.get("nodes", [])
+    parent = {}
+    for i, nd in enumerate(nodes):
+        for c in nd.get("children", []):
+            parent.setdefault(c, i)
+    cache: dict[int, object] = {}
+
+    def world(i, seen=()):
+        if i not in cache:
+            p = parent.get(i)
+            up = world(p, seen + (i,)) if p is not None and p not in seen else np.eye(4)
+            cache[i] = up @ _node_matrix(nodes[i])
+        return cache[i]
+
+    def ancestors(i):
+        out, k = set(), i
+        while k in parent and parent[k] not in out:
+            k = parent[k]
+            out.add(k)
+        return out
+
+    ports = [i for i, nd in enumerate(nodes)
+             if re.fullmatch(r"(?i)hardpoint_[a-z]{3,}", nd.get("name", "")) and not nd.get("children")]
+    moved = []
+    for h in ports:
+        suffix = nodes[h]["name"].split("_", 1)[1].lower()
+        token = re.compile(rf"(?i)_{re.escape(suffix)}(?:_|\d|$)")
+        hw, above = world(h), ancestors(h)
+        for c in list(parent):
+            nd = nodes[c]
+            if c == h or c in above or nd.get("name", "").lower().startswith("hardpoint_"):
+                continue
+            if parent[c] not in above:
+                continue  # only parts hung on something the port's weapon also hangs from
+            names = [nd.get("name", "")] + [nodes[k].get("name", "") for k in nd.get("children", [])]
+            if not any(token.search(n.replace("\\", "/").split("/")[-1]) for n in names):
+                continue
+            cw = world(c)
+            if np.linalg.norm(cw[:3, 3] - hw[:3, 3]) > 1e-3 or np.allclose(cw[:3, :3], hw[:3, :3], atol=1e-4):
+                continue
+            nodes[parent[c]]["children"].remove(c)
+            nodes[h].setdefault("children", []).append(c)
+            for k in ("matrix", "translation", "rotation", "scale"):
+                nd.pop(k, None)
+            parent[c] = h
+            cache.clear()
+            moved.append((nd.get("name", str(c)), nodes[h]["name"]))
+            break
+    return moved
+
+
+def fix_port_parts(glb: Path, log=print) -> int:
+    moved = []
+
+    def edit(doc) -> bool:
+        moved.extend(mount_port_parts(doc))
+        return bool(moved)
+
+    try:
+        if _edit_glb_json(glb, edit):
+            log(f"turned {len(moved)} weapon part(s) to match their mount: " + ", ".join(p for p, _ in moved))
+    except OSError:
+        glb.with_name(glb.name + ".tmp").unlink(missing_ok=True)
+    return len(moved)
 
 
 # ---------- tagged variant geometry ----------
@@ -677,6 +1053,81 @@ def fix_tagged_geometry(glb: Path, install: Install, settings: dict, log=print) 
     except OSError:
         pass
     return fixed
+
+
+def _base_name(s) -> str:
+    return re.sub(r"(_\d+)+$", "", str(s or "").lower())
+
+
+def rebind_borrowed_meshes(doc: dict) -> tuple[int, int]:
+    """Give parts that borrowed another part's mesh their own back.
+
+    StarBreaker numbers each item's meshes as it goes, and the ranges overlap, so a part
+    can end up drawing another part's mesh: the Storm AA's fins drew the whole body, the
+    Wolf's missile pod the body, the Redeemer's thruster cover plate a 19 m wing thruster
+    standing on end, the Idris's dashboard buttons chair bases. Meshes carry their part's
+    name, so a part whose mesh is named for another part, while a part of that name also
+    uses it, borrowed it. It gets the unused mesh of its own name (the one numbered among
+    its neighbours' meshes), or one its namesakes use, or none at all. Returns
+    (rebound, dropped)."""
+    nodes, meshes = doc.get("nodes", []), doc.get("meshes", [])
+    users: dict[int, list[int]] = {}
+    for i, nd in enumerate(nodes):
+        m = nd.get("mesh")
+        if m is not None and m < len(meshes):
+            users.setdefault(m, []).append(i)
+    by_name: dict[str, list[int]] = {}
+    for m, me in enumerate(meshes):
+        by_name.setdefault(_base_name(me.get("name")), []).append(m)
+    parent = {}
+    for i, nd in enumerate(nodes):
+        for c in nd.get("children", []):
+            parent.setdefault(c, i)
+    borrowed = []
+    for m, us in users.items():
+        mname = _base_name(meshes[m].get("name"))
+        if not mname or not any(_base_name(nodes[i].get("name")) == mname for i in us):
+            continue
+        borrowed += [i for i in us if nodes[i].get("name") and _base_name(nodes[i]["name"]) != mname]
+    rebound = dropped = 0
+    for i in borrowed:
+        own = _base_name(nodes[i]["name"])
+        wrong = nodes[i]["mesh"]
+        cands = [c for c in by_name.get(own, []) if c != wrong]
+        if not cands:
+            del nodes[i]["mesh"]
+            dropped += 1
+            continue
+        # neighbours: meshes of the other parts of the same item (siblings and parent)
+        p = parent.get(i)
+        near = [nodes[k]["mesh"] for k in ([p] if p is not None else []) + (nodes[p].get("children", []) if p is not None else [])
+                if k != i and "mesh" in nodes[k]]
+        ref = sorted(near)[len(near) // 2] if near else wrong
+        unused = [c for c in cands if not users.get(c)]
+        pool = unused or [c for c in cands if all(_base_name(nodes[u].get("name")) == own for u in users.get(c, []))] or cands
+        best = min(pool, key=lambda c: abs(c - ref))
+        nodes[i]["mesh"] = best
+        users.setdefault(best, []).append(i)
+        rebound += 1
+    return rebound, dropped
+
+
+def fix_borrowed_meshes(glb: Path, log=print) -> int:
+    counts = (0, 0)
+
+    def edit(doc) -> bool:
+        nonlocal counts
+        counts = rebind_borrowed_meshes(doc)
+        return sum(counts) > 0
+
+    try:
+        _edit_glb_json(glb, edit)
+    except OSError:
+        glb.with_name(glb.name + ".tmp").unlink(missing_ok=True)
+        return 0
+    if sum(counts):
+        log(f"gave {counts[0]} part(s) their own mesh back" + (f", removed {counts[1]} that had none" if counts[1] else ""))
+    return sum(counts)
 
 
 def fix_item_meshes(glb: Path, log=print) -> int:

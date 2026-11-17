@@ -61,6 +61,10 @@
                     </DropDownButton>
                 </Grid>
 
+                <ComboBox x:Name="PaintBox" Header="Paint" HorizontalAlignment="Stretch" Visibility="Collapsed"
+                          SelectionChanged="Paint_Changed"
+                          ToolTipService.ToolTip="The ship's paints (liveries) from the game: the viewer and exports use the one picked here" />
+
                 <Grid x:Name="GearRow" ColumnSpacing="12" Margin="2,0,0,0"
                       ToolTipService.ToolTip="Show and print the ship with its landing gear retracted and the gear doors closed. Ships that change shape on the ground (Eclipse, Stingray, Mole, Clipper and more) show them folded with the gear down once the gear has been raised once.">
                     <Grid.ColumnDefinitions>
@@ -141,6 +145,8 @@
                             </Grid.RowDefinitions>
                             <ComboBox x:Name="ModeBox" Header="Body" HorizontalAlignment="Stretch" />
                             <ComboBox x:Name="FormatBox" Grid.Column="1" Header="Format" HorizontalAlignment="Stretch" />
+                            <ComboBox x:Name="ColorsBox" Grid.Row="1" Grid.Column="1" Header="Paint colors" HorizontalAlignment="Stretch"
+                                      ToolTipService.ToolTip="3MF only: paint the print in the ship's colors (and the paint picked above), ready for Bambu Studio's AMS. Off prints one color." />
                             <NumberBox x:Name="VoxelBox" Grid.Row="1" Header="Detail (mm)" Minimum="0.05" Maximum="2" SmallChange="0.05"
                                        SpinButtonPlacementMode="Compact"
                                        ToolTipService.ToolTip="Resolution of the solid remesh: 0.1 suits resin, 0.2 to 0.4 suits FDM" />
@@ -184,19 +190,24 @@
                             </Grid.RowDefinitions>
                             <ComboBox x:Name="ShapeBox" Header="Base" HorizontalAlignment="Stretch" SelectionChanged="Stand_Changed" />
                             <NumberBox x:Name="StandHBox" Grid.Column="1" Header="Stand height (mm)" Minimum="5" Maximum="300" SmallChange="5"
-                                       SpinButtonPlacementMode="Compact" />
+                                       SpinButtonPlacementMode="Compact" ValueChanged="Peg_Changed" />
                             <NumberBox x:Name="TiltBox" Grid.Row="1" Header="Display angle (°)" Minimum="-45" Maximum="45" SmallChange="5"
-                                       SpinButtonPlacementMode="Compact" ToolTipService.ToolTip="Tilts the nose up (negative tilts it down)" />
+                                       SpinButtonPlacementMode="Compact" ValueChanged="Peg_Changed"
+                                       ToolTipService.ToolTip="Tilts the nose up (negative tilts it down)" />
                             <NumberBox x:Name="HollowBox" Grid.Row="1" Grid.Column="1" Header="Hollow walls (mm)" Minimum="0" Maximum="10"
                                        SmallChange="0.5" SpinButtonPlacementMode="Compact"
                                        ToolTipService.ToolTip="For resin: leaves walls this thick. 0 keeps it solid." />
                             <NumberBox x:Name="PegFwdBox" Grid.Row="2" Header="Peg forward (mm)" Minimum="-500" Maximum="500" SmallChange="2"
-                                       SpinButtonPlacementMode="Compact"
+                                       SpinButtonPlacementMode="Compact" ValueChanged="Peg_Changed"
                                        ToolTipService.ToolTip="Moves the stand's peg toward the nose (negative: toward the tail) from where the app puts it, for example off a fin" />
                             <NumberBox x:Name="PegSideBox" Grid.Row="2" Grid.Column="1" Header="Peg right (mm)" Minimum="-500" Maximum="500" SmallChange="2"
-                                       SpinButtonPlacementMode="Compact"
+                                       SpinButtonPlacementMode="Compact" ValueChanged="Peg_Changed"
                                        ToolTipService.ToolTip="Moves the stand's peg to the right (negative: to the left)" />
                         </Grid>
+                        <ToggleSwitch x:Name="StandViewSwitch" Header="Show on stand" OnContent="On" OffContent="Off"
+                                      Toggled="StandView_Toggled"
+                                      ToolTipService.ToolTip="Shows the ship in the viewer on the stand these settings make: base, post, height and display angle" />
+                        <TextBlock x:Name="PegNote" Style="{StaticResource Secondary}" TextWrapping="Wrap" />
                         <TextBox x:Name="PlateText" Header="Name plate text" MaxLength="60" PlaceholderText="Ship name" />
                         <TextBox x:Name="PlateText2" Header="Second line (optional, smaller)" MaxLength="60"
                                  PlaceholderText="Ship's own name, a motto, a date…" />

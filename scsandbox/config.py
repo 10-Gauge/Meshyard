@@ -41,9 +41,11 @@ DEFAULTS: dict = {
         "extract_files": ["{exe}", "p4k", "extract", "-o", "{out}", "--filter", "{filter}"],
         "extract_records": ["{exe}", "dcb", "extract", "--format", "json", "-o", "{out}", "--filter", "{filter}"],
         "export_entity": ["{exe}", "entity", "export", "{name}", "{out}", "--lod", "{lod}"],
-        # browser preview: quarter-resolution textures and no light fixtures (the viewer
-        # drops lights anyway); keeps capital ships loadable (Idris: 363 -> 148 MB)
-        "export_entity_preview": ["{exe}", "entity", "export", "{name}", "{out}", "--lod", "{lod}", "--mip", "4", "--no-lights"],
+        # viewer model: eighth-size textures and no light fixtures (the viewer drops
+        # lights anyway); "Full detail" has everything
+        "export_entity_preview": ["{exe}", "entity", "export", "{name}", "{out}", "--lod", "{lod}", "--mip", "3", "--no-lights"],
+        # the same for capital ships, whose model at that detail is too heavy for the viewer
+        "export_entity_preview_light": ["{exe}", "entity", "export", "{name}", "{out}", "--lod", "{lod}", "--mip", "4", "--no-lights"],
         # Decomposed package (scene.json + assets) with animations, for the
         # StarBreaker Blender add-on: landing gear, doors, ramps, canopies.
         "export_entity_animated": ["{exe}", "entity", "export", "{name}", "{out}", "--kind", "decomposed", "--lod", "{lod}"],
@@ -124,6 +126,9 @@ def settings_path() -> Path:
 # reject. Early versions saved every setting, so these can linger in settings.json
 # and override the fixed defaults; drop them on load.
 _STALE_COMMANDS = {
+    "export_entity_preview": [
+        ["{exe}", "entity", "export", "{name}", "{out}", "--lod", "{lod}", "--mip", "4", "--no-lights"],
+    ],
     "export_entity_print": [
         ["{exe}", "entity", "export", "{name}", "{out}", "--lod", "0", "--no-textures"],
         # material names are needed to drop decal/parallax layers when printing

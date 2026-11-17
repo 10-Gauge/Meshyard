@@ -17,8 +17,36 @@ function viewerMsg(text, corner = false) {
   m.textContent = text;
   m.style.placeItems = corner ? "end start" : "center";
 }
-const viewer = createViewer($("viewer"), { onMessage: viewerMsg });
+const viewer = createViewer($("viewer"), {
+  onMessage(text, corner) {
+    viewerMsg(text, corner);
+    if (corner && /×/.test(text)) refreshPeg();  // a model just finished loading
+  },
+});
 const showModel = (url) => viewer.show(url);
+
+// ---------- peg preview ----------
+// Where the stand's peg will go with the current print settings, drawn in the viewer,
+// so Peg forward / Peg right can be set before exporting.
+let pegTimer = null, pegSeq = 0;
+function refreshPeg(delay = 0) {
+  clearTimeout(pegTimer);
+  pegTimer = setTimeout(async () => {
+    const a = state.selected, seq = ++pegSeq;
+    if (!a || $("p-stand").value === "none" || !viewer.loaded) {
+      viewer.setPeg(null); $("p-pegnote").textContent = ""; return;
+    }
+    $("p-pegnote").textContent = "Finding where the peg goes…";
+    try {
+      const { job } = await api("/api/print/peg", { channel: state.channel, ...target(a), variant: state.variant || "preview", options: printOptions() });
+      trackJob(job, (r) => {
+        if (seq !== pegSeq || state.selected !== a) return;
+        viewer.setPeg(r.top ? r : null);
+        $("p-pegnote").textContent = r.top ? "Peg shown in orange in the viewer." : "";
+      }, () => { if (seq === pegSeq) $("p-pegnote").textContent = ""; });
+    } catch (e) { $("p-pegnote").textContent = ""; }
+  }, delay);
+}
 
 // ---------- jobs ----------
 function trackJob(id, onDone, onError) {
@@ -212,8 +240,25 @@ function select(a, li) {
   $("flight-row").hidden = a.category !== "spaceships";
   $("p-thin").hidden = true;
   $("p-thin").innerHTML = "";
+  loadPaints(a);
   loadModel("preview");
 }
+
+// the ship's paints (liveries), its default first; hidden for things without any
+async function loadPaints(a) {
+  const sel = $("b-paint");
+  sel.innerHTML = "";
+  $("paint-row").hidden = true;
+  if (!a.id || a.figure) return;
+  try {
+    const { items } = await api(`/api/assets/${a.id}/paints?channel=${encodeURIComponent(state.channel)}`);
+    if (state.selected !== a || !items.length) return;
+    for (const p of items) sel.append(new Option(p.name, p.id));
+    $("paint-row").hidden = false;
+  } catch (e) { /* no paints: the row stays hidden */ }
+}
+const paintId = () => ($("paint-row").hidden ? "" : $("b-paint").value) || "";
+$("b-paint").onchange = () => loadModel(state.variant || "preview");
 
 async function loadModel(variant, spawn = false) {
   const a = state.selected;
@@ -228,7 +273,8 @@ async function loadModel(variant, spawn = false) {
     const weapons = weaponsOut() && variant !== "animated" ? "out" : "";
     const vtol = !!vtolOn() && variant !== "animated";
     const flight = !!flightOn() && variant !== "animated";
-    const { job } = await api("/api/model", { channel: state.channel, id: a.id, variant, spawn, gear, weapons, vtol, flight });
+    const { job } = await api("/api/model", { channel: state.channel, id: a.id, variant, spawn, gear, weapons, vtol, flight,
+      paint: variant === "animated" ? "" : paintId() });
     trackJob(job, (r) => { if (!spawn && state.selected === a) showModel(r.url); },
       (err) => { if (!spawn && state.selected === a) viewerMsg("Export failed: " + err.split("\n").slice(-3).join(" ")); });
   } catch (e) { viewerMsg(e.message); }
@@ -254,6 +300,7 @@ function applyPrintDefaults(p) {
   for (const [k, id] of Object.entries(PRINT_FIELDS)) if (p[k] != null) $(id).value = p[k];
   $("p-mode").value = p.mode || "solid";
   $("p-format").value = p.format || "3mf";
+  $("p-colors").value = String(p.paint_colors || 0);
   $("p-stand").value = p.stand || "none";
   $("p-standshape").value = p.stand_shape || "round";
   $("p-thicken").checked = p.thicken !== false;
@@ -270,11 +317,16 @@ function updateMinMm() {
   for (const id of ["p-standtext", "p-standtext2", "p-logo"]) $(id).disabled = noStand || $("p-standshape").value !== "rect";
 }
 for (const id of ["p-nozzle", "p-minn", "p-stand", "p-standshape"]) $(id).addEventListener("input", updateMinMm);
+// settings that move the peg: show where it goes now
+for (const id of ["p-stand", "p-standfwd", "p-standside", "p-size", "p-tilt", "p-standh", "p-standshape", "p-standtext", "p-standtext2"])
+  $(id).addEventListener("input", () => refreshPeg(600));
+$("p-standview").addEventListener("change", () => viewer.setStandView($("p-standview").checked));
 
 function printOptions() {
   const o = { mode: $("p-mode").value, format: $("p-format").value, stand: $("p-stand").value, thicken: $("p-thicken").checked,
     stand_shape: $("p-standshape").value, stand_text: $("p-standtext").value.trim(),
-    stand_text2: $("p-standtext2").value.trim(), stand_scale: $("p-standscale").checked, stand_logo: $("p-logo").value };
+    stand_text2: $("p-standtext2").value.trim(), stand_scale: $("p-standscale").checked, stand_logo: $("p-logo").value,
+    paint_colors: $("p-format").value === "3mf" ? +$("p-colors").value : 0 };
   for (const [k, id] of Object.entries(PRINT_FIELDS)) o[k] = +$(id).value;
   const overrides = {};
   for (const row of $("p-thin").querySelectorAll("tr[data-name]")) {
@@ -353,6 +405,20 @@ $("b-print").onclick = async () => {
                             : `${r.watertight_bodies}/${r.bodies} parts watertight`) +
         (extras.length ? " · " + extras.join(" · ") : "");
       box.append(s);
+      if (r.colors && r.colors.length) {
+        // painted 3MF: which color goes in which filament slot
+        const c = document.createElement("div");
+        c.className = "swatches";
+        c.append("Painted for Bambu Studio. Filaments: ");
+        r.colors.forEach((hex, i) => {
+          const sw = document.createElement("span");
+          sw.className = "swatch";
+          sw.title = hex;
+          sw.style.background = hex;
+          c.append(` ${i + 1} `, sw, ` ${hex}`);
+        });
+        box.append(c);
+      }
       showFiles(box, r.downloads);
     }, (err) => { $("p-result").textContent = err.split("\n").slice(-3).join(" "); });
   } catch (e) { $("p-result").textContent = e.message; }
@@ -391,7 +457,7 @@ $("b-export").onclick = async () => {
 
 // ---------- character builder ----------
 // The print / thin-part / export requests are about an indexed asset or a built figure.
-function target(a) { return a.figure ? { figure: a.figure, label: a.name } : { id: a.id, gear: gearUp() ? "up" : "down", weapons: weaponsOut() ? "out" : "", vtol: !!vtolOn(), flight: !!flightOn() }; }
+function target(a) { return a.figure ? { figure: a.figure, label: a.name } : { id: a.id, gear: gearUp() ? "up" : "down", weapons: weaponsOut() ? "out" : "", vtol: !!vtolOn(), flight: !!flightOn(), paint: paintId() }; }
 
 const chars = { on: false, slots: [], picks: {}, loadedBody: null };
 

@@ -357,3 +357,91 @@ def test_stand_peg_stays_off_a_fin_and_can_be_moved():
     moved = printprep.plan_stand(g, printprep.PrintOptions(size_mm=120, stand="peg", stand_forward_mm=-30),
                                  log=lambda *_: None)
     assert moved.y < s.y - 20                         # toward the tail
+
+
+def test_solid_glow_trim_prints_but_flat_glow_sheets_do_not(tmp_path):
+    """The Alpha Wolf's nozzle rims are glow-named solid parts; light strips are flat."""
+    sc = trimesh.Scene()
+    sc.add_geometry(trimesh.creation.box((4, 1, 8)), node_name="hull", geom_name="hull")
+    sc.add_geometry(trimesh.creation.annulus(0.3, 0.5, 0.4), node_name="glow_thruster_main", geom_name="rim",
+                    transform=trimesh.transformations.translation_matrix([0, 0, 4.5]))
+    sc.add_geometry(trimesh.creation.box((2, 0.004, 0.5)), node_name="glow_strip", geom_name="strip",
+                    transform=trimesh.transformations.translation_matrix([0, 0.51, 0]))
+    glb = tmp_path / "ship.glb"
+    sc.export(glb)
+    names = {n for n, _ in printprep.load_parts(glb, [])}
+    assert "glow_thruster_main" in names and "glow_strip" not in names
+
+
+def test_peg_preview_is_under_the_model_in_its_own_coordinates(tmp_path):
+    # a 10 x 2 x 4 m slab (glTF: y up, so 2 m tall), centred 3 m off the origin in x
+    slab = trimesh.creation.box(extents=[10, 2, 4])
+    slab.apply_translation([3, 5, 0])
+    path = tmp_path / "slab.glb"
+    trimesh.Scene(slab).export(path)
+    r = printprep.peg_preview(path, printprep.PrintOptions(stand="peg", size_mm=100))
+    x, y, z = r["top"]
+    assert abs(x - 3) < 0.3 and abs(z) < 0.3          # under the middle
+    assert abs(y - 4) < 0.3                           # on the underside (5 - 2/2)
+    assert np.allclose(r["down"], [0, -1, 0], atol=1e-6)
+    assert 0 < r["peg_r"] < r["post_r"] < 1           # sizes in meters at 1:100
+    moved = printprep.peg_preview(path, printprep.PrintOptions(stand="peg", size_mm=100, stand_side_mm=20))
+    assert moved["top"][0] != x                       # the offset moves it
+    assert printprep.peg_preview(path, printprep.PrintOptions(stand="none"))["stand"] == "none"
+
+
+def test_paint_codes_match_the_slicers_triangle_states():
+    # whole triangles painted with filament n, as Bambu Studio / PrusaSlicer write them
+    assert [printprep._paint_code(n) for n in (0, 1, 2, 3, 4, 5, 16)] == ["", "4", "8", "0C", "1C", "2C", "DC"]
+
+
+def _two_tone_parts():
+    top = trimesh.creation.box(extents=[10, 4, 1]); top.apply_translation([0, 0, 0.5])
+    bottom = trimesh.creation.box(extents=[10, 4, 1]); bottom.apply_translation([0, 0, -0.5])
+    top.metadata["rgb"], bottom.metadata["rgb"] = (200, 30, 30), (30, 30, 200)
+    return [("top", top), ("bottom", bottom)]
+
+
+def test_painted_faces_take_the_nearest_surfaces_color():
+    parts = _two_tone_parts()
+    hull = trimesh.creation.box(extents=[10.2, 4.2, 2.2])     # the remeshed print around them
+    hull = hull.subdivide().subdivide()
+    faces, colors = printprep.paint_faces(hull, parts, 4, log=lambda *_: None)
+    assert len(colors) == 2 and set(colors) == {"#C81E1E", "#1E1EC8"}
+    up = hull.face_normals[:, 2] > 0.9
+    down = hull.face_normals[:, 2] < -0.9
+    red = colors.index("#C81E1E") + 1
+    assert np.all(faces[up] == red) and np.all(faces[down] != red)
+
+
+def test_bambu_3mf_carries_paint_and_filament_colors(tmp_path):
+    import json as _json
+    import zipfile
+    box = trimesh.creation.box(extents=[1, 1, 1])
+    out = printprep.write_bambu_3mf(tmp_path / "x.3mf", [("model", box)], {"model": np.array([1, 2] * 6)},
+                                    ["#112233", "#445566"], "x")
+    z = zipfile.ZipFile(out)
+    model = z.read("3D/3dmodel.model").decode()
+    assert model.count('paint_color="4"') == 6 and model.count('paint_color="8"') == 6
+    assert 'slic3rpe:mmu_segmentation="8"' in model
+    assert _json.loads(z.read("Metadata/project_settings.config"))["filament_colour"] == ["#112233", "#445566"]
+    assert 'lastid="11"' in z.read("Metadata/Slic3r_PE_model.config").decode()
+    assert len(trimesh.load(out, force="mesh").faces) == 12   # still an ordinary 3MF
+
+
+def test_loose_bits_are_dropped_but_real_parts_stay():
+    g = printprep.Grid(np.zeros(3), np.array([40.0, 40.0, 40.0]), 1.0, 1)
+    g.v[2:30, 2:30, 2:20] = True        # the model
+    g.v[35:37, 35:37, 35:37] = True     # an 8-voxel speck far away
+    g.v[2:12, 33:40, 2:12] = True       # a 700-voxel piece: big enough to keep
+    assert printprep.drop_loose_bits(g, log=lambda *_: None) == 1
+    assert not g.v[35:37, 35:37, 35:37].any() and g.v[5, 35, 5]
+
+
+def test_tiny_shells_are_dropped_after_the_surface_fit():
+    body = trimesh.creation.box((40, 20, 10))
+    wing = trimesh.creation.box((5, 5, 5)).apply_translation((60, 0, 0))
+    speck = trimesh.creation.box((0.5, 0.5, 0.5)).apply_translation((0, 30, 0))
+    out = printprep.drop_small_shells(trimesh.util.concatenate([body, wing, speck]), log=lambda *_: None)
+    vols = sorted(abs(s.volume) for s in out.split(only_watertight=False))
+    assert vols == pytest.approx([125, 8000])

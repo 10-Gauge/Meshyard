@@ -66,6 +66,7 @@
         <button id="b-full">Full detail</button>
         <button id="b-spawn" title="Export and queue it for the Blender sandbox">Spawn in sandbox</button>
         <button id="b-spawn-anim" title="Spawn with landing gear, door and ramp animations (controls are in Blender's StarBreaker tab)">Spawn animated</button>
+        <label id="paint-row" hidden title="The ship's paints (liveries) from the game: the viewer and exports use the one picked here">Paint <select id="b-paint"></select></label>
         <label class="chk" id="gear-row" title="Show and print the ship with its landing gear retracted and the gear doors closed. Ships that change shape on the ground (Eclipse, Stingray, Mole, Clipper and more) show them folded with the gear down once the gear has been raised once. Needs Blender."><input id="b-gear" type="checkbox"> Landing gear up</label>
         <label class="chk" id="weapons-row" title="Show and print the ship with its deployable guns and missile racks out (Alpha Wolf, M80, ...; needs Blender)"><input id="b-weapons" type="checkbox"> Weapons deployed</label>
         <label class="chk" id="vtol-row" title="Show and print the ship with its thrusters swung into VTOL mode (Starlifter, Paladin, Golem, ...; needs Blender)"><input id="b-vtol" type="checkbox"> VTOL mode</label>
@@ -82,6 +83,9 @@
         </label>
         <label>Format
           <select id="p-format"><option value="3mf">3MF</option><option value="stl">STL</option><option value="obj">OBJ</option><option value="ply">PLY</option></select>
+        </label>
+        <label title="3MF only: paint the print in the ship's colors (and the paint picked above), ready for Bambu Studio's AMS. Off prints one color.">Paint colors
+          <select id="p-colors"><option value="0">Off</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="8">8</option><option value="12">12</option><option value="16">16</option></select>
         </label>
         <label title="Resolution of the solid remesh: 0.1 suits resin, 0.2-0.4 suits FDM">Detail <input id="p-voxel" type="number" min="0.05" max="2" step="0.05"> mm</label>
 
@@ -118,6 +122,8 @@
         <label>Stand height <input id="p-standh" type="number" min="5" max="300" step="5"> mm</label>
         <label title="Move the stand's peg toward the nose (+) or the tail (-) from where the app puts it, for example off a fin">Peg forward <input id="p-standfwd" type="number" step="1" value="0"> mm</label>
         <label title="Move the stand's peg to the right (+) or the left (-) from where the app puts it">Peg right <input id="p-standside" type="number" step="1" value="0"> mm</label>
+        <label title="Shows the ship in the viewer on the stand these settings make: base, post, height and display angle"><input id="p-standview" type="checkbox"> Show on stand</label>
+        <span id="p-pegnote" class="muted"></span>
         <label title="Tilts the model nose up (negative tilts it down)">Display angle <input id="p-tilt" type="number" min="-45" max="45" step="5"> °</label>
         <label title="For resin: leaves walls this thick and saves resin. 0 keeps it solid.">Hollow walls <input id="p-hollow" type="number" min="0" max="10" step="0.5"> mm</label>
 

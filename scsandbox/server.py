@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import (blendertools, catalog, characters, config, exporters, gear, installs, logos, models, printlog,
+from . import (blendertools, catalog, characters, config, exporters, gear, installs, logos, models, paints, printlog,
                printprep, rig, sandbox, tools)
 
 WEB = Path(__file__).parent / "web"
@@ -100,7 +100,7 @@ class App:
         return self.submit(f"Index {inst.channel} {inst.version}", fn)
 
     def job_model(self, channel: str, asset_id: int, variant: str, spawn: bool, gear_up: bool = False,
-                  weapons: str | None = None, vtol: bool = False, flight: bool = False):
+                  weapons: str | None = None, vtol: bool = False, flight: bool = False, paint: str = ""):
         inst = self.install(channel)
         asset = catalog.get(self.con(inst), asset_id)
         if not asset:
@@ -109,6 +109,7 @@ class App:
         def fn(log):
             if (gear_up or weapons or vtol or flight or _shape_pending(inst, asset, self.settings)) and variant != "animated":
                 glb = _posed(inst, self.settings, asset, variant, gear_up, weapons, log, vtol, flight)
+                glb = paints.painted_glb(inst, self.settings, asset, glb, paint, log)
                 if spawn:
                     sandbox.add(asset["record"], asset["name"], glb, inst.channel, inst.build_id)
                     log("queued for the Blender sandbox")
@@ -122,6 +123,7 @@ class App:
                     log("queued for the Blender sandbox")
                 return {"url": None, "path": str(pkg)}
             glb = models.glb_for(inst, self.settings, asset, variant, log=log)
+            glb = paints.painted_glb(inst, self.settings, asset, glb, paint, log)
             if spawn:
                 sandbox.add(asset["record"], asset["name"], glb, inst.channel, inst.build_id)
                 log("queued for the Blender sandbox")
@@ -205,9 +207,11 @@ class App:
             raise LookupError("asset not found")
         gear_up, weapons, vtol, flight = b.get("gear") == "up", _weapons(b), bool(b.get("vtol")), bool(b.get("flight"))
         if gear_up or weapons or vtol or flight or _shape_pending(inst, asset, self.settings):
-            getter = lambda variant, log: _posed(inst, self.settings, asset, variant, gear_up, weapons, log, vtol, flight)  # noqa: E731
+            shaped = lambda variant, log: _posed(inst, self.settings, asset, variant, gear_up, weapons, log, vtol, flight)  # noqa: E731
         else:
-            getter = lambda variant, log: models.glb_for(inst, self.settings, asset, variant, log=log)  # noqa: E731
+            shaped = lambda variant, log: models.glb_for(inst, self.settings, asset, variant, log=log)  # noqa: E731
+        paint = str(b.get("paint") or "")  # the livery picked in the viewer (painted 3MF prints, exports)
+        getter = lambda variant, log: paints.painted_glb(inst, self.settings, asset, shaped(variant, log), paint, log)  # noqa: E731
         return asset["name"], getter, False, asset.get("manufacturer") or ""
 
     def job_print(self, channel: str, b: dict, opts: dict):
@@ -255,6 +259,19 @@ class App:
             log("measuring parts at print size")
             return printprep.analyze(glb, po)
         return self.submit(f"Find thin parts: {name}", fn)
+
+    def job_peg(self, channel: str, b: dict, opts: dict):
+        """Where the stand peg will go for these print settings, on the model the viewer
+        shows (same coordinates), so it can be drawn before exporting."""
+        inst = self.install(channel)
+        name, glb_for, _, _ = self._target(inst, b)
+        opts = {k: v for k, v in opts.items() if k != "stand_logo"}
+        po = printprep.PrintOptions.from_settings(self.settings, **opts)
+        variant = b.get("variant") if b.get("variant") in ("preview", "full") else "preview"
+
+        def fn(log):
+            return printprep.peg_preview(Path(glb_for(variant, log)), po, log)
+        return self.submit(f"Peg position: {name}", fn)
 
     def job_measure(self, channel: str, b: dict):
         """The model's real size in meters, for turning a scale into a print size and back.
@@ -317,7 +334,10 @@ def _shape_pending(inst, asset, settings) -> bool:
     shape is known, or not worked out yet (and Blender is there to do it)."""
     if asset.get("category") != "spaceships":
         return False
-    return gear.has_landed_shape(inst, asset) or (gear.landed_unknown(inst, asset) and gear.blender_available(settings))
+    if gear.has_landed_shape(inst, asset) or gear.has_shape(inst, asset, "closed"):
+        return True
+    unknown = gear.landed_unknown(inst, asset) or not gear._shape_known(inst, asset, "closed")
+    return unknown and gear.blender_available(settings)
 
 
 def _weapons(b: dict) -> str | None:
@@ -349,7 +369,7 @@ PRINT_OPTS = {"size_mm": float, "scale": float, "mode": str, "voxel_mm": float, 
               "min_feature_nozzles": float, "thicken": bool, "hollow_mm": float, "tilt_deg": float,
               "stand": str, "stand_height_mm": float, "part_overrides": dict,
               "stand_shape": str, "stand_text": lambda v: str(v)[:60], "stand_text2": lambda v: str(v)[:60],
-              "stand_scale": bool, "stand_forward_mm": float, "stand_side_mm": float,
+              "stand_scale": bool, "stand_forward_mm": float, "stand_side_mm": float, "paint_colors": int,
               "stand_logo": lambda v: re.sub(r"[^A-Za-z]", "", str(v))[:8]}  # manufacturer code or "auto"
 
 
@@ -466,6 +486,13 @@ def make_handler(app: App):
                     inst = app.install(q.get("channel"))
                     a = catalog.get(app.con(inst), int(m.group(1)))
                     return self.json(a) if a else self.json({"error": "not found"}, 404)
+                m = re.fullmatch(r"/api/assets/(\d+)/paints", p)
+                if m:  # the liveries this ship can wear, its default first
+                    inst = app.install(q.get("channel"))
+                    a = catalog.get(app.con(inst), int(m.group(1)))
+                    if not a:
+                        return self.json({"error": "not found"}, 404)
+                    return self.json({"items": paints.ship_paints(inst, app.settings, a, log=lambda *_: None)})
                 m = re.fullmatch(r"/api/jobs/(\w+)", p)
                 if m:
                     job = app.jobs.get(m.group(1))
@@ -502,13 +529,16 @@ def make_handler(app: App):
                     return self.json({"job": app.job_model(b.get("channel"), int(b["id"]),
                                                            b.get("variant", "preview"), bool(b.get("spawn")),
                                                            gear_up=b.get("gear") == "up", weapons=_weapons(b),
-                                                           vtol=bool(b.get("vtol")), flight=bool(b.get("flight")))})
+                                                           vtol=bool(b.get("vtol")), flight=bool(b.get("flight")),
+                                                           paint=str(b.get("paint") or ""))})
                 if p == "/api/character/build":
                     return self.json({"job": app.job_character(b.get("channel"), b)})
                 if p == "/api/print":
                     return self.json({"job": app.job_print(b.get("channel"), b, print_opts(b))})
                 if p == "/api/print/measure":
                     return self.json({"job": app.job_measure(b.get("channel"), b)})
+                if p == "/api/print/peg":
+                    return self.json({"job": app.job_peg(b.get("channel"), b, print_opts(b))})
                 if p == "/api/print/analyze":
                     return self.json({"job": app.job_analyze(b.get("channel"), b, print_opts(b))})
                 if p == "/api/export":
