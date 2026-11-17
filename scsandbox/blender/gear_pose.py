@@ -306,7 +306,12 @@ try:
         # whose gear doesn't already hang below the hull is gear up.
         by_drop = down_drop > max(20.0, 1.3 * up_drop) and up_drop > -0.5 * abs(down_drop) \
             and not (hangs and up_drop > 0.5 * down_drop)
-        if (down > 20 and (up * 4 < down or by_drop)) or (up == 0 and down > 0 and down_drop > 0.3):
+        # Gear that hangs below the hull, lifts going up and barely drops going down is
+        # down already, however many rig bones the down clip touches (the Mk I Hornets,
+        # Archimedes and Skylark: their deploy clips move the whole rig a little).
+        already_down = hangs and up_drop < 0 and abs(down_drop) < 20.0
+        if not already_down and ((down > 20 and (up * 4 < down or by_drop))
+                                 or (up == 0 and down > 0 and down_drop > 0.3)):
             plan += gear_plan(False)
             result["gear_down"] = True
 

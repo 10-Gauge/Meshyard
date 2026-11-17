@@ -31,7 +31,7 @@ import numpy as np
 from . import blendertools, models, tools
 from .installs import Install
 
-POSE_VERSION = 15
+POSE_VERSION = 16
 # pose kind -> (cache name, file suffix, what it is in messages)
 KINDS = {"gear": ("gearup", "gearup", "landing gear"),
          "weapons_out": ("weapons_out", "wout", "deployable weapons"),
@@ -138,6 +138,16 @@ def _key(name: str) -> str:
     return n.lower()
 
 
+_SIDES = {"left": "right", "right": "left", "Left": "Right", "Right": "Left",
+          "LEFT": "RIGHT", "RIGHT": "LEFT"}
+
+
+def _mirror_name(name: str) -> str | None:
+    """The other side's name for a left or right part, or None for a centered one."""
+    out = re.sub(r"left|right|Left|Right|LEFT|RIGHT", lambda m: _SIDES[m.group(0)], name)
+    return out if out != name else None
+
+
 def _fit(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
     """Rigid transform (4x4) taking points src onto dst (Kabsch)."""
     cs, cd = src.mean(0), dst.mean(0)
@@ -227,6 +237,16 @@ def apply_pose(glb: Path, out: Path, pose: dict, log=print, hide_gear: bool = Tr
             return top
 
         hidden = ({gear_item(k) for k in target} - {None}) if hide_gear else set()
+        if hide_gear and not hidden and target:
+            # the clip only reached the doors (the F7A Mk I): every gear leg goes inside
+            hidden = {k for k in order if gear_item(k) == k}
+        # A leg the clip doesn't reach (the Mk I Hornets' right wing gear is one solid
+        # mesh with no bones) goes with its mirror on the other side.
+        for h in list(hidden):
+            twin = _mirror_name(nodes[h].get("name", ""))
+            for k in by_key.get(_key(twin), []) if twin else []:
+                if gear_item(k) == k:
+                    hidden.add(k)
         drop = set()
         for h in hidden:
             todo = [h]
