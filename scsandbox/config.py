@@ -60,6 +60,8 @@ DEFAULTS: dict = {
         "export_skin": ["{exe}", "skin", "export", "{name}", "{out}"],
         # a texture from Data.p4k as PNG (manufacturer logos for the name plate)
         "decode_dds": ["{exe}", "dds", "decode", "{input}", "{out}"],
+        # a livery stencil one size down from full (the paint package's copy is too small)
+        "decode_stencil": ["{exe}", "dds", "decode", "{input}", "{out}", "--mip", "1"],
         "convert_geometry": ["{exe}", "{input}", "-glb", "-objectdir", "{objectdir}", "-outdir", "{out}"],
         # the body skin with the game's stance animations (.chrparams + .dba next to it)
         "convert_animated": ["{exe}", "{input}", "-glb", "-anim", "-notex", "-objectdir", "{objectdir}", "-outdir", "{out}"],
