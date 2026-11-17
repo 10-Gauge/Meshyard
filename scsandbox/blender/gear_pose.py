@@ -187,12 +187,7 @@ try:
                 plan.append((n, "snap_last"))
             elif not is_gear_clip(n) and re.search(r"(^|_|:)wings?_(retract|fold|close)(\.caf)?$", low):
                 plan.append((n, "snap_first"))
-        if any(FLIGHT_WINGS.search(n.lower()) for n in names):
-            # the Stingray's deployed mode also brings its nose cannons out
-            for n in names:
-                m = re.search(r"cannons?_(deploy|retract)$", n.lower())
-                if m:
-                    plan.append((n, "snap_last" if m.group(1) == "deploy" else "snap_first"))
+        # the guns stay as the Weapons switch has them (the Stingray's cannons too)
     elif kind == "vtol":
         # thrusters that swing down for vertical flight: "nacelles_deploy" (Starlifter, Golem,
         # RAFT), "vtol_deploy" (Paladin, Hull B, Asgard, Fury), "nacelles_open" (Starlancer),
