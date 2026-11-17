@@ -107,7 +107,7 @@ class App:
             raise LookupError("asset not found")
 
         def fn(log):
-            if (gear_up or weapons or vtol or flight or gear.has_landed_shape(inst, asset)) and variant != "animated":
+            if (gear_up or weapons or vtol or flight or _shape_pending(inst, asset, self.settings)) and variant != "animated":
                 glb = _posed(inst, self.settings, asset, variant, gear_up, weapons, log, vtol, flight)
                 if spawn:
                     sandbox.add(asset["record"], asset["name"], glb, inst.channel, inst.build_id)
@@ -204,7 +204,7 @@ class App:
         if not asset:
             raise LookupError("asset not found")
         gear_up, weapons, vtol, flight = b.get("gear") == "up", _weapons(b), bool(b.get("vtol")), bool(b.get("flight"))
-        if gear_up or weapons or vtol or flight or gear.has_landed_shape(inst, asset):
+        if gear_up or weapons or vtol or flight or _shape_pending(inst, asset, self.settings):
             getter = lambda variant, log: _posed(inst, self.settings, asset, variant, gear_up, weapons, log, vtol, flight)  # noqa: E731
         else:
             getter = lambda variant, log: models.glb_for(inst, self.settings, asset, variant, log=log)  # noqa: E731
@@ -312,6 +312,14 @@ class App:
         return self.submit("Build character", fn)
 
 
+def _shape_pending(inst, asset, settings) -> bool:
+    """A ship that may look different with the gear down than in its export: its landed
+    shape is known, or not worked out yet (and Blender is there to do it)."""
+    if asset.get("category") != "spaceships":
+        return False
+    return gear.has_landed_shape(inst, asset) or (gear.landed_unknown(inst, asset) and gear.blender_available(settings))
+
+
 def _weapons(b: dict) -> str | None:
     """Requested weapon pose: "out" (deployed), "in" (stowed) or None (as exported)."""
     w = str(b.get("weapons") or "").lower()
@@ -341,7 +349,7 @@ PRINT_OPTS = {"size_mm": float, "scale": float, "mode": str, "voxel_mm": float, 
               "min_feature_nozzles": float, "thicken": bool, "hollow_mm": float, "tilt_deg": float,
               "stand": str, "stand_height_mm": float, "part_overrides": dict,
               "stand_shape": str, "stand_text": lambda v: str(v)[:60], "stand_text2": lambda v: str(v)[:60],
-              "stand_scale": bool,
+              "stand_scale": bool, "stand_forward_mm": float, "stand_side_mm": float,
               "stand_logo": lambda v: re.sub(r"[^A-Za-z]", "", str(v))[:8]}  # manufacturer code or "auto"
 
 

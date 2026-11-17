@@ -180,6 +180,7 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <ComboBox x:Name="ShapeBox" Header="Base" HorizontalAlignment="Stretch" SelectionChanged="Stand_Changed" />
                             <NumberBox x:Name="StandHBox" Grid.Column="1" Header="Stand height (mm)" Minimum="5" Maximum="300" SmallChange="5"
@@ -189,6 +190,12 @@
                             <NumberBox x:Name="HollowBox" Grid.Row="1" Grid.Column="1" Header="Hollow walls (mm)" Minimum="0" Maximum="10"
                                        SmallChange="0.5" SpinButtonPlacementMode="Compact"
                                        ToolTipService.ToolTip="For resin: leaves walls this thick. 0 keeps it solid." />
+                            <NumberBox x:Name="PegFwdBox" Grid.Row="2" Header="Peg forward (mm)" Minimum="-500" Maximum="500" SmallChange="2"
+                                       SpinButtonPlacementMode="Compact"
+                                       ToolTipService.ToolTip="Moves the stand's peg toward the nose (negative: toward the tail) from where the app puts it, for example off a fin" />
+                            <NumberBox x:Name="PegSideBox" Grid.Row="2" Grid.Column="1" Header="Peg right (mm)" Minimum="-500" Maximum="500" SmallChange="2"
+                                       SpinButtonPlacementMode="Compact"
+                                       ToolTipService.ToolTip="Moves the stand's peg to the right (negative: to the left)" />
                         </Grid>
                         <TextBox x:Name="PlateText" Header="Name plate text" MaxLength="60" PlaceholderText="Ship name" />
                         <TextBox x:Name="PlateText2" Header="Second line (optional, smaller)" MaxLength="60"

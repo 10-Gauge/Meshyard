@@ -248,7 +248,8 @@ $("b-spawn-anim").onclick = () => loadModel("animated", true);
 
 // ---------- print export ----------
 const PRINT_FIELDS = { size_mm: "p-size", voxel_mm: "p-voxel", nozzle_mm: "p-nozzle", min_feature_nozzles: "p-minn",
-  stand_height_mm: "p-standh", tilt_deg: "p-tilt", hollow_mm: "p-hollow" };
+  stand_height_mm: "p-standh", tilt_deg: "p-tilt", hollow_mm: "p-hollow",
+  stand_forward_mm: "p-standfwd", stand_side_mm: "p-standside" };
 function applyPrintDefaults(p) {
   for (const [k, id] of Object.entries(PRINT_FIELDS)) if (p[k] != null) $(id).value = p[k];
   $("p-mode").value = p.mode || "solid";
@@ -263,6 +264,8 @@ function updateMinMm() {
   $("p-minmm").textContent = `= ${mm.toFixed(2)} mm`;
   const noStand = $("p-stand").value === "none";
   $("p-standh").disabled = noStand;
+  $("p-standfwd").disabled = noStand;
+  $("p-standside").disabled = noStand;
   $("p-standshape").disabled = noStand;
   for (const id of ["p-standtext", "p-standtext2", "p-logo"]) $(id).disabled = noStand || $("p-standshape").value !== "rect";
 }

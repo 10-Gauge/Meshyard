@@ -109,6 +109,7 @@ def test_posed_glb_stacks_gear_and_weapons_and_names_the_missing_pose(tmp_path, 
     calls = []
 
     monkeypatch.setattr(gear, "_pose_path", lambda install, asset, kind="gear": tmp_path / f"X.{kind}.json")
+    monkeypatch.setattr(gear, "blender_available", lambda settings: True)
 
     def fake_pose(install, settings, asset, log=print, kind="gear"):
         calls.append(kind)
@@ -154,8 +155,10 @@ def test_gear_down_shows_the_landed_shape_once_it_is_known(tmp_path, monkeypatch
     monkeypatch.setattr(models, "glb_for", lambda *a, **k: glb)
     monkeypatch.setattr(gear, "_pose_path", lambda install, asset, kind="gear": tmp_path / f"X.{kind}.json")
     monkeypatch.setattr(gear, "pose_for", lambda install, settings, asset, log=print, kind="gear": wing)
-    # not known yet: the plain export, no Blender run
+    # no Blender to work it out: the plain export
+    monkeypatch.setattr(gear, "blender_available", lambda settings: False)
     assert gear.posed_glb(None, {}, {"record": "X"}, "preview") == glb
+    monkeypatch.setattr(gear, "blender_available", lambda settings: True)
     (tmp_path / "X.landed.json").write_text(json.dumps(wing))
     out = gear.posed_glb(None, {}, {"record": "X"}, "preview", log=lambda *_: None)
     assert out.name == "ship.preview-l.landed.glb"

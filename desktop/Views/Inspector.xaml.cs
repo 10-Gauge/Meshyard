@@ -84,6 +84,8 @@ public sealed partial class Inspector : UserControl
         NozzleBox.Value = p.Num("nozzle_mm", 0.4);
         MinNBox.Value = p.Num("min_feature_nozzles", 3);
         StandHBox.Value = p.Num("stand_height_mm", 30);
+        PegFwdBox.Value = 0;
+        PegSideBox.Value = 0;
         TiltBox.Value = p.Num("tilt_deg", 0);
         HollowBox.Value = p.Num("hollow_mm", 0);
         ThickenSwitch.IsOn = p.Bool("thicken", true);
@@ -352,6 +354,8 @@ public sealed partial class Inspector : UserControl
         var none = Picked(StandBox) == "none";
         ShapeBox.IsEnabled = !none;
         StandHBox.IsEnabled = !none;
+        PegFwdBox.IsEnabled = !none;
+        PegSideBox.IsEnabled = !none;
         PlateText.IsEnabled = PlateText2.IsEnabled = LogoBox.IsEnabled = ScaleSwitch.IsEnabled = !none && Picked(ShapeBox) == "rect";
     }
 
@@ -364,6 +368,7 @@ public sealed partial class Inspector : UserControl
             ["stand_text2"] = PlateText2.Text.Trim(), ["stand_logo"] = Picked(LogoBox), ["stand_scale"] = ScaleSwitch.IsOn,
             ["size_mm"] = Safe(SizeBox.Value), ["voxel_mm"] = Safe(VoxelBox.Value), ["nozzle_mm"] = Safe(NozzleBox.Value),
             ["min_feature_nozzles"] = Safe(MinNBox.Value), ["stand_height_mm"] = Safe(StandHBox.Value),
+            ["stand_forward_mm"] = Safe(PegFwdBox.Value), ["stand_side_mm"] = Safe(PegSideBox.Value),
             ["tilt_deg"] = Safe(TiltBox.Value), ["hollow_mm"] = Safe(HollowBox.Value),
         };
         // a scale the user chose wins, so every model comes out at that scale

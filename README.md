@@ -60,7 +60,7 @@ Click **Export printable file** and you get a single watertight 3MF or STL that 
 
 Some other options worth knowing:
 
-- **Stand.** *Separate stand, pegs into a socket* prints a base and post, and cuts a matching socket under the model so you can print the ship flat and press it on. The other option fuses the stand to the model.
+- **Stand.** *Separate stand, pegs into a socket* prints a base and post, and cuts a matching socket under the model so you can print the ship flat and press it on. The other option fuses the stand to the model. The app puts the peg under the ship's balance point on a broad part of the underside, clear of fins. **Peg forward** and **Peg right** move it by a few millimeters if you want it somewhere else.
 - **Base.** *Round*, or *Rectangle with name plate*. The name plate has a sloped front with raised lettering: the ship name, an optional smaller second line (a ship's own name, a motto, a date), and the manufacturer's logo embossed beside the text. Turn on **Scale on the plate** to add the print scale too, like 1:85.
 - **Display angle** tilts the model nose up. The socket still comes out full depth when it's tilted.
 - **Hollow walls** for resin prints. Remember to add drain holes in your slicer.
@@ -87,7 +87,7 @@ The poses come from the game itself. Each gun is held the way the game holds tha
 - The railgun and rocket launchers sit on the shoulder.
 - The gun sits in the hand where the game puts it, and the other hand goes to that gun's own grip point.
 
-Low ready is the same stance with the muzzle tipped down. Arms at the sides is the game's standing idle, with the gun slung across the back, or holstered on the thigh for a pistol.
+Low ready holds the gun lowered across the body, stock at the chest and muzzle down to the left. Arms at the sides is the game's standing idle, with a rifle hanging down the back stock up, a railgun or launcher hanging muzzle up on the right, or a pistol holstered on the thigh.
 
 A few cases don't have proper game animations, so they use a stance we built by hand: the Vendetta HMG (carried at the hip) and launchers on the female body. Every skin of a gun is held exactly like the base gun.
 
