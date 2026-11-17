@@ -30,7 +30,7 @@ CHANNELS = ("primary", "secondary", "tertiary")
 METAL_SPEC = 0.2
 # how dark a stencil's marked areas make the paint under them (1 = no change)
 STENCIL_TONE = 0.45
-LIVERY_VERSION = 10   # bump to repaint cached painted models
+LIVERY_VERSION = 14   # bump to repaint cached painted models
 DEFAULT = "default"
 # an exported color counts as the ship's default paint when every channel is this close
 MATCH = 0.02
@@ -366,6 +366,67 @@ def _layer_tint(sm: dict | None) -> list[float] | None:
     return rgb if len(rgb) == 3 else None
 
 
+def _use_extension(doc: dict, name: str) -> None:
+    used = doc.setdefault("extensionsUsed", [])
+    if name not in used:
+        used.append(name)
+
+
+def _rgb_param(sm: dict, name: str) -> list[float] | None:
+    v = (sm.get("public_params") or {}).get(name)
+    try:
+        rgb = [float(x) for x in str(v).split(",")]
+    except (TypeError, ValueError):
+        return None
+    return rgb if len(rgb) == 3 else None
+
+
+def _stencil_specs(sm: dict):
+    """(colors per stencil channel, opacity) when the stencil marks colored specular
+    flecks rather than darker paint (StencilTintOverride 0 with spec colors: the Railen's
+    pink, teal or grey sparkle); None otherwise."""
+    if _param(sm, "StencilTintOverride", 1) != 0:
+        return None
+    c1, c2 = _rgb_param(sm, "StencilSpecularColor"), _rgb_param(sm, "StencilSpecularColor2")
+    if not c1:
+        return None
+    return [c1, c2 or c1], max(0.0, min(1.0, _param(sm, "StencilOpacity", 1.0)))
+
+
+def stencil_flecks(mask_png: Path, base: list[float], colors: list[list[float]], opacity: float):
+    """Base color and metal/roughness images for a fleck stencil: the paint, with the
+    stencil's first two channels' areas in their spec colors as polished metal."""
+    import io
+
+    import numpy as np
+    from PIL import Image
+    try:
+        a = np.asarray(Image.open(mask_png).convert("RGBA"), float) / 255.0
+    except (OSError, ValueError):
+        return None, None
+    col = np.ones(a.shape[:2] + (3,)) * np.asarray(base[:3])
+    metal = np.zeros(a.shape[:2])
+    for c, rgb in enumerate(colors[:2]):
+        ch = a[..., c]
+        if ch.max() - ch.min() < 0.02:
+            continue
+        w = (ch * opacity)[..., None]
+        col = col * (1 - w) + np.asarray(rgb) * w
+        metal = np.maximum(metal, ch * opacity)
+
+    def png(lin, mode):
+        srgb = np.where(lin <= 0.0031308, lin * 12.92, 1.055 * np.power(np.clip(lin, 0, 1), 1 / 2.4) - 0.055)
+        buf = io.BytesIO()
+        Image.fromarray((np.clip(srgb, 0, 1) * 255).round().astype("uint8"), mode).save(buf, "PNG")
+        return buf.getvalue()
+    mr = np.zeros(a.shape[:2] + (3,))
+    mr[..., 1] = 0.55 - 0.35 * metal      # roughness: the flecks polished
+    mr[..., 2] = metal                    # metalness
+    buf = io.BytesIO()
+    Image.fromarray((mr * 255).round().astype("uint8"), "RGB").save(buf, "PNG")   # linear data
+    return png(col, "RGB"), buf.getvalue()
+
+
 def _set_paint(pbr: dict, color: list[float], spec: list[float] | None, metal: bool = False) -> None:
     base = pbr.get("baseColorFactor") or [1.0, 1.0, 1.0, 1.0]
     alpha = base[3] if len(base) > 3 else 1.0
@@ -478,19 +539,42 @@ def repaint(doc: dict, bin_: bytes, old: dict, new: dict, sources=None, root: Pa
                 bin_, ti = _add_texture(doc, bin_, (root / tex).read_bytes())
                 pbr["baseColorTexture"] = {"index": ti, "texCoord": 0}
                 touched = True
+        if root is not None:
+            # the stencil (the stock paint's too: the Railen's sparkle is one)
             st = _texture(sm, "stencil", "TexSlot7")
             if st and (root / st).is_file():
-                png = stencil_tone(root / st, _param(sm, "StencilTintOverride", 1))
+                flecks = _stencil_specs(sm)
+                if flecks:
+                    png, mr = stencil_flecks(root / st, pbr.get("baseColorFactor") or [1, 1, 1, 1], *flecks)
+                    pbr["baseColorFactor"] = [1.0, 1.0, 1.0, (pbr.get("baseColorFactor") or [1, 1, 1, 1])[3]]
+                else:
+                    png, mr = stencil_tone(root / st, _param(sm, "StencilTintOverride", 1)), None
                 if png:
-                    bin_, ti = _add_texture(doc, bin_, png)
+                    uv = 1 if _param(sm, "UseUV2ForStencil", 0) > 0.5 else 0
                     tiling = _param(sm, "StencilTiling", 1.0) or 1.0
-                    pbr["baseColorTexture"] = {
-                        "index": ti, "texCoord": 1 if _param(sm, "UseUV2ForStencil", 0) > 0.5 else 0,
-                        "extensions": {"KHR_texture_transform": {"scale": [tiling, tiling]}}}
-                    used = doc.setdefault("extensionsUsed", [])
-                    if "KHR_texture_transform" not in used:
-                        used.append("KHR_texture_transform")
+                    ext = {"KHR_texture_transform": {"scale": [tiling, tiling]}}
+                    bin_, ti = _add_texture(doc, bin_, png)
+                    pbr["baseColorTexture"] = {"index": ti, "texCoord": uv, "extensions": ext}
+                    if mr:
+                        bin_, mi = _add_texture(doc, bin_, mr)
+                        pbr["metallicRoughnessTexture"] = {"index": mi, "texCoord": uv, "extensions": ext}
+                        pbr["metallicFactor"], pbr["roughnessFactor"] = 1.0, 1.0
+                    _use_extension(doc, "KHR_texture_transform")
                     touched = True
+        # the iridescent sheen (the Gatac Railen's panels; most of its liveries turn it off)
+        irid = _param(sm, "IridescenceStrength", 0.0) if _texture(sm, "iridescence", "TexSlot10") \
+            or "IridescenceStrength" in (sm.get("public_params") or {}) else 0.0
+        exts = m.setdefault("extensions", {})
+        if irid > 0:
+            exts["KHR_materials_iridescence"] = {"iridescenceFactor": min(1.0, irid), "iridescenceIor": 1.3,
+                                                 "iridescenceThicknessMinimum": 150.0,
+                                                 "iridescenceThicknessMaximum": 450.0}
+            _use_extension(doc, "KHR_materials_iridescence")
+            touched = True
+        elif "KHR_materials_iridescence" in exts:
+            del exts["KHR_materials_iridescence"]
+        if not exts:
+            m.pop("extensions", None)
         changed += touched
     return bin_, changed
 
@@ -520,6 +604,138 @@ def painted_glb(install: Install, settings: dict, asset: dict, glb: Path, paint:
     return _repainted(install, settings, asset, glb, paint, old, new, log)
 
 
+def _paint_geometry(record: dict, paint: str) -> str:
+    """The hull geometry file a paint's node (or the ship's own) uses."""
+    found = {"": ""}
+
+    def walk(o):
+        if isinstance(o, dict):
+            if o.get("_Type_") == "SGeometryNodeParams":
+                path = (((o.get("Geometry") or {}).get("Geometry") or {}).get("path")) or ""
+                tags = [t for t in re.split(r"[\s,]+", o.get("Tags") or "") if t]
+                if path and paint in tags:
+                    found.setdefault(paint, path)
+                elif path and not tags and not found[""]:
+                    found[""] = path
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+    walk(record)
+    return found.get(paint) or found[""]
+
+
+def _activated(base: dict, liv: dict | None) -> list[str]:
+    """Submaterials the livery switches on that the base material leaves off: the export
+    has no faces for them (the Idris Sharktooth's shark mouth decal)."""
+    state = lambda sm: (((sm or {}).get("activation_state") or {}).get("state") or "active")  # noqa: E731
+    return [n for n, sm in (liv or {}).items() if n in base and state(base[n]) == "inactive" and state(sm) == "active"]
+
+
+def graft_faces(doc: dict, bin_: bytes, parts: list[dict], prefix: str) -> tuple[bytes, int]:
+    """Add livery-only faces (from livery_faces.py: per object, in its own coordinates)
+    under the export's node of the same name, drawn with the doc's material for that
+    submaterial. Returns (binary, pieces added)."""
+    import numpy as np
+    mats = {}
+    for i, m in enumerate(doc.get("materials", [])):
+        sub = (m.get("extras") or {}).get("source_name")
+        if sub and (m.get("name") or "").lower().startswith(prefix) and sub not in mats:
+            mats[sub] = i
+    by_name: dict[str, list[int]] = {}
+    for i, nd in enumerate(doc.get("nodes", [])):
+        by_name.setdefault(nd.get("name") or "", []).append(i)
+    added = 0
+    for part in parts:
+        targets = by_name.get(part.get("object") or "", [])
+        sub = part.get("material")
+        if len(targets) != 1 or sub not in mats or not part.get("triangles"):
+            continue   # no single place to put it, or nothing to draw it with
+        attrs = {}
+        bin_, attrs["POSITION"] = _add_array(doc, bin_, np.asarray(part["positions"], np.float32), True)
+        bin_, attrs["NORMAL"] = _add_array(doc, bin_, np.asarray(part["normals"], np.float32), False)
+        for key, uv in (("TEXCOORD_0", "uv0"), ("TEXCOORD_1", "uv1")):
+            a = np.asarray(part[uv], np.float32)
+            a[:, 1] = 1.0 - a[:, 1]          # Blender's v runs up, glTF's down
+            bin_, attrs[key] = _add_array(doc, bin_, a, False)
+        bin_, ia = _add_array(doc, bin_, np.asarray(part["triangles"], np.uint32).reshape(-1, 1), False, indices=True)
+        doc["meshes"].append({"name": f"livery_{part['object']}",
+                              "primitives": [{"attributes": attrs, "indices": ia, "material": mats[sub], "mode": 4}]})
+        node = len(doc["nodes"])
+        doc["nodes"].append({"name": f"livery_{part['object']}_{sub}", "mesh": len(doc["meshes"]) - 1})
+        doc["nodes"][targets[0]].setdefault("children", []).append(node)
+        added += 1
+    return bin_, added
+
+
+def _add_array(doc: dict, bin_: bytes, arr, with_bounds: bool, indices: bool = False) -> tuple[bytes, int]:
+    import numpy as np
+    bin_ += b"\0" * (-len(bin_) % 4)
+    data = np.ascontiguousarray(arr).tobytes()
+    views = doc.setdefault("bufferViews", [])
+    views.append({"buffer": 0, "byteOffset": len(bin_), "byteLength": len(data),
+                  "target": 34963 if indices else 34962})
+    bin_ += data
+    doc.setdefault("buffers", [{}])[0]["byteLength"] = len(bin_)
+    acc = {"bufferView": len(views) - 1, "componentType": 5125 if indices else 5126, "count": int(arr.shape[0]),
+           "type": "SCALAR" if indices else {2: "VEC2", 3: "VEC3", 4: "VEC4"}[arr.shape[1]]}
+    if with_bounds:
+        acc["min"] = [float(x) for x in arr.min(axis=0)]
+        acc["max"] = [float(x) for x in arr.max(axis=0)]
+    doc.setdefault("accessors", []).append(acc)
+    return bin_, len(doc["accessors"]) - 1
+
+
+LIVERY_FACES_SCRIPT = Path(__file__).parent / "blender" / "livery_faces.py"
+
+
+def livery_faces(install: Install, settings: dict, asset: dict, pkg: Path, geo_path: str,
+                 names: list[str], log) -> list[dict]:
+    """The faces of the named submaterials from the paint package's mesh file for the
+    hull (StarBreaker keeps them there; the bundled export drops faces whose material is
+    off in the stock paint). Needs Blender; cached. [] when not available."""
+    import hashlib
+    import subprocess
+    root = pkg.parent.parent
+    rel = Path(geo_path.replace("\\", "/").lstrip("/"))
+    folder = root / "Data" / rel.parent
+    if not folder.is_dir():
+        hits = [d for d in (root / "Data").rglob("*") if d.is_dir() and d.as_posix().lower().endswith(rel.parent.as_posix().lower())]
+        folder = hits[0] if hits else folder
+    # the hull and everything beside it (doors and covers wear the hull's material too)
+    blends = sorted(folder.glob("*_LOD*.blend")) if folder.is_dir() else []
+    if not blends:
+        return []
+    key = hashlib.sha1(("|".join(sorted(names)) + "|".join(map(str, blends))).encode()).hexdigest()[:12]
+    cache = models.models_dir(install) / f"{models._safe(asset['record'])}.livery_{key}.json"
+    if not cache.exists():
+        try:
+            blender = tools.find("blender", settings)
+        except tools.ToolError:
+            log("livery decals skipped: needs Blender")
+            return []
+        log("reading the livery's own decals (Blender)")
+        tmp = cache.with_name(cache.name + ".part")
+        try:
+            subprocess.run([str(blender), "-b", "--python", str(LIVERY_FACES_SCRIPT), "--", str(tmp), ",".join(names),
+                            *map(str, blends)],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           stdin=subprocess.DEVNULL, env=tools.child_env(None), timeout=300,
+                           creationflags=tools.NO_WINDOW)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            log(f"livery decals skipped: {e}")
+            return []
+        if not tmp.exists():
+            log("livery decals skipped: Blender wrote nothing")
+            return []
+        tmp.replace(cache)
+    try:
+        return json.loads(cache.read_text(encoding="utf-8")).get("parts") or []
+    except (OSError, ValueError):
+        return []
+
+
 def _repainted(install: Install, settings: dict, asset: dict, glb: Path, paint: str, old: dict, new: dict, log) -> Path:
     out = glb.with_name(glb.name[:-4] + f".{models._safe(paint).lower()}.l{LIVERY_VERSION}.glb")
     pkg = paint_package(install, settings, asset, log)
@@ -529,6 +745,14 @@ def _repainted(install: Install, settings: dict, asset: dict, glb: Path, paint: 
         sources = livery_sources(pkg, asset["record"], paint) if pkg else None
         doc, bin_, version = models._read_glb(glb)
         bin_, n = repaint(doc, bin_, old, new, sources, pkg.parent.parent if pkg else None)
+        if sources and sources[2] is not None:
+            names = _activated(sources[1], sources[2])
+            geo = _paint_geometry(_record_json(install, asset) or {}, paint) if names else ""
+            parts = livery_faces(install, settings, asset, pkg, geo, names, log) if geo else []
+            if parts:
+                bin_, k = graft_faces(doc, bin_, parts, f"{sources[0].lower()}_mtl_")
+                if k:
+                    log(f"added {k} livery-only part(s): {', '.join(names)}")
         models._write_glb(out, doc, bin_, version)
         log(f"painted {n} material(s) in {paint}" + ("" if sources else " (colors only)"))
     return out
