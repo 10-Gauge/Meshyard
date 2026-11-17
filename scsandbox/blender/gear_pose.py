@@ -59,6 +59,7 @@ try:
     # a landing gear "Deploy" fragment ends gear down whatever its clip is called (the
     # Fury's gear clip is "VTOL_Deploy", the Prowler's "landing_mode_deploy_left").
     gear_end = {}       # "fragment:i:clip" -> mode that puts the gear down
+    shut_end = {}       # "fragment:i:clip" -> mode that ends its action closed/retracted
     gear_clips = set()  # clips the game uses for the landing gear
     try:
         with open(os.path.join(os.path.dirname(bpy.data.filepath), "scene.json"), encoding="utf-8") as f:
@@ -78,6 +79,8 @@ try:
                 names.append(a["name"])
             for i, fr in enumerate(frags):
                 tags = {t.lower() for t in fr.get("frag_tags") or []}
+                if len(tags & {"open", "close", "deploy", "retract"}) == 1:
+                    shut_end[f"fragment:{i}:{a['name']}"] = "snap_last" if tags & {"close", "retract"} else "snap_first"
                 if kinds[i] == "landinggear" and tags & {"deploy", "retract"} and len(tags & {"deploy", "retract"}) == 1:
                     gear_end[f"fragment:{i}:{a['name']}"] = "snap_last" if "deploy" in tags else "snap_first"
     except (OSError, ValueError):
@@ -145,8 +148,18 @@ try:
         for n in names:
             stem = re.sub(r"\.caf$", "", n.lower())
             m = shut.search(stem)
-            if m and not inside.search(n) and not is_gear_clip(n):
-                plan.append((n, "snap_last" if m.group(1) in ("close", "retract") else "snap_first"))
+            if not m or inside.search(n) or is_gear_clip(n):
+                continue
+            if n.startswith("fragment:"):
+                # a tagged use may play the clip backwards (the Gladius's "canopy_close"
+                # is also its "Open" action): go by the action, or leave it to the
+                # plain clip
+                if n in shut_end:
+                    plan.append((n, shut_end[n]))
+                    continue
+                if re.sub(r"^fragment:\d+:", "", n) in names:
+                    continue
+            plan.append((n, "snap_last" if m.group(1) in ("close", "retract") else "snap_first"))
     elif kind == "flight":
         # flight mode: the Stingray opens its flaps ("flap_deploy", "fap_retract") and draws
         # its wings in; ships exported in their landed shape spread their wings: the
@@ -195,7 +208,7 @@ try:
         weapon = re.compile(
             r"(?i)(?:^|[_/:])(?:weapons?|cannons?|guns?|missiles?|missilebays?|torpedo(?:e?s)?|rockets?|turrets?"
             r"|bomb(?:er)?|bay)(?:_[a-z0-9]+){0,3}?_(deploy|retract|open|close)(?:_(?:left|right|\d+))?(?:\.caf)?$")
-        not_weapon = re.compile(r"(?i)seat|enter|exit|ladder|cockpit|canopy|cargo|turret_door|operator|pilot")
+        not_weapon = re.compile(r"(?i)seat|enter|exit|ladder|cockpit|canopy|cargo|turret_door|operator|pilot|rack|component|locker")
         out = kind == "weapons_out"
         for n in names:
             m = weapon.search(n)
@@ -203,6 +216,19 @@ try:
                 continue
             opening = m.group(1).lower() in ("deploy", "open")
             plan.append((n, "snap_last" if opening == out else "snap_first"))
+    # The rules above read a clip's direction from its name. A tagged use can play it
+    # backwards ("fragment:1:canopy_close" as the "Open" action), so flip those.
+    if kind not in ("gear", "closed"):
+        fixed = []
+        for n, mode in plan:
+            if n.startswith("fragment:") and n in shut_end and n not in gear_end:
+                stem = re.sub(r"^fragment:\d+:", "", n).lower()
+                says_open = bool(re.search(r"deploy|open|extend|unfold", stem))
+                acts_open = shut_end[n] == "snap_first"
+                if says_open != acts_open:
+                    mode = "snap_first" if mode == "snap_last" else "snap_last"
+            fixed.append((n, mode))
+        plan = fixed
     objs = [o for o in bpy.data.objects if o.type in {"EMPTY", "MESH"}]
     bind = {o.name: o.matrix_world.copy() for o in objs}
 
