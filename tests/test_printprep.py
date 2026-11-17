@@ -388,3 +388,42 @@ def test_peg_preview_is_under_the_model_in_its_own_coordinates(tmp_path):
     moved = printprep.peg_preview(path, printprep.PrintOptions(stand="peg", size_mm=100, stand_side_mm=20))
     assert moved["top"][0] != x                       # the offset moves it
     assert printprep.peg_preview(path, printprep.PrintOptions(stand="none"))["stand"] == "none"
+
+
+def test_paint_codes_match_the_slicers_triangle_states():
+    # whole triangles painted with filament n, as Bambu Studio / PrusaSlicer write them
+    assert [printprep._paint_code(n) for n in (0, 1, 2, 3, 4, 5, 16)] == ["", "4", "8", "0C", "1C", "2C", "DC"]
+
+
+def _two_tone_parts():
+    top = trimesh.creation.box(extents=[10, 4, 1]); top.apply_translation([0, 0, 0.5])
+    bottom = trimesh.creation.box(extents=[10, 4, 1]); bottom.apply_translation([0, 0, -0.5])
+    top.metadata["rgb"], bottom.metadata["rgb"] = (200, 30, 30), (30, 30, 200)
+    return [("top", top), ("bottom", bottom)]
+
+
+def test_painted_faces_take_the_nearest_surfaces_color():
+    parts = _two_tone_parts()
+    hull = trimesh.creation.box(extents=[10.2, 4.2, 2.2])     # the remeshed print around them
+    hull = hull.subdivide().subdivide()
+    faces, colors = printprep.paint_faces(hull, parts, 4, log=lambda *_: None)
+    assert len(colors) == 2 and set(colors) == {"#C81E1E", "#1E1EC8"}
+    up = hull.face_normals[:, 2] > 0.9
+    down = hull.face_normals[:, 2] < -0.9
+    red = colors.index("#C81E1E") + 1
+    assert np.all(faces[up] == red) and np.all(faces[down] != red)
+
+
+def test_bambu_3mf_carries_paint_and_filament_colors(tmp_path):
+    import json as _json
+    import zipfile
+    box = trimesh.creation.box(extents=[1, 1, 1])
+    out = printprep.write_bambu_3mf(tmp_path / "x.3mf", [("model", box)], {"model": np.array([1, 2] * 6)},
+                                    ["#112233", "#445566"], "x")
+    z = zipfile.ZipFile(out)
+    model = z.read("3D/3dmodel.model").decode()
+    assert model.count('paint_color="4"') == 6 and model.count('paint_color="8"') == 6
+    assert 'slic3rpe:mmu_segmentation="8"' in model
+    assert _json.loads(z.read("Metadata/project_settings.config"))["filament_colour"] == ["#112233", "#445566"]
+    assert 'lastid="11"' in z.read("Metadata/Slic3r_PE_model.config").decode()
+    assert len(trimesh.load(out, force="mesh").faces) == 12   # still an ordinary 3MF

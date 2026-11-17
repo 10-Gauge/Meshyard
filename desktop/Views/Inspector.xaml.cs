@@ -29,6 +29,7 @@ public sealed partial class Inspector : UserControl
         _main = main;
         Fill(ModeBox, ("solid", "Solid, watertight"), ("parts", "Separate parts (kit)"));
         Fill(FormatBox, ("3mf", "3MF"), ("stl", "STL"), ("obj", "OBJ"), ("ply", "PLY"));
+        Fill(ColorsBox, ("0", "Off"), ("2", "2"), ("3", "3"), ("4", "4"), ("5", "5"), ("6", "6"), ("8", "8"), ("12", "12"), ("16", "16"));
         Fill(StandBox, ("none", "No stand"), ("peg", "Separate stand, pegs into a socket"),
              ("attached", "Stand printed with the model"));
         Fill(ShapeBox, ("round", "Round"), ("rect", "Rectangle with name plate"));
@@ -91,6 +92,7 @@ public sealed partial class Inspector : UserControl
         ThickenSwitch.IsOn = p.Bool("thicken", true);
         Pick(ModeBox, p.Str("mode", "solid"));
         Pick(FormatBox, p.Str("format", "3mf"));
+        Pick(ColorsBox, $"{p.Long("paint_colors")}");
         Pick(StandBox, p.Str("stand", "none"));
         Pick(ShapeBox, p.Str("stand_shape", "round"));
         UpdateStrength();
@@ -459,6 +461,7 @@ public sealed partial class Inspector : UserControl
             ["min_feature_nozzles"] = Safe(MinNBox.Value), ["stand_height_mm"] = Safe(StandHBox.Value),
             ["stand_forward_mm"] = Safe(PegFwdBox.Value), ["stand_side_mm"] = Safe(PegSideBox.Value),
             ["tilt_deg"] = Safe(TiltBox.Value), ["hollow_mm"] = Safe(HollowBox.Value),
+            ["paint_colors"] = Picked(FormatBox) == "3mf" && int.TryParse(Picked(ColorsBox), out var nc) ? nc : 0,
         };
         // a scale the user chose wins, so every model comes out at that scale
         if (_sizeBy == "scale" && Safe(ScaleBox.Value) > 0) o["scale"] = ScaleBox.Value;
@@ -564,6 +567,9 @@ public sealed partial class Inspector : UserControl
             }
             else parts.Add($"{r.Long("watertight_bodies")}/{r.Long("bodies")} parts watertight");
             if (r.Long("thickened") > 0) parts.Add($"{r.Long("thickened")} thin parts thickened to {r.Num("min_feature_mm"):0.##} mm");
+            var colors = r.Items("colors").Select(c => c.GetValue<string>()).ToList();
+            if (colors.Count > 0)  // painted 3MF: which color goes in which filament slot
+                parts.Add("painted for Bambu Studio, filaments " + string.Join(", ", colors.Select((c, i) => $"{i + 1} {c}")));
             var files = r.Items("files").Select(f => f.GetValue<string>()).ToList();
             ShowResult(PrintResult, InfoBarSeverity.Success, $"{size} mm ({r.Str("scale")})", string.Join(" · ", parts), files);
             _ = ShowLastPrint(t);

@@ -300,6 +300,7 @@ function applyPrintDefaults(p) {
   for (const [k, id] of Object.entries(PRINT_FIELDS)) if (p[k] != null) $(id).value = p[k];
   $("p-mode").value = p.mode || "solid";
   $("p-format").value = p.format || "3mf";
+  $("p-colors").value = String(p.paint_colors || 0);
   $("p-stand").value = p.stand || "none";
   $("p-standshape").value = p.stand_shape || "round";
   $("p-thicken").checked = p.thicken !== false;
@@ -324,7 +325,8 @@ $("p-standview").addEventListener("change", () => viewer.setStandView($("p-stand
 function printOptions() {
   const o = { mode: $("p-mode").value, format: $("p-format").value, stand: $("p-stand").value, thicken: $("p-thicken").checked,
     stand_shape: $("p-standshape").value, stand_text: $("p-standtext").value.trim(),
-    stand_text2: $("p-standtext2").value.trim(), stand_scale: $("p-standscale").checked, stand_logo: $("p-logo").value };
+    stand_text2: $("p-standtext2").value.trim(), stand_scale: $("p-standscale").checked, stand_logo: $("p-logo").value,
+    paint_colors: $("p-format").value === "3mf" ? +$("p-colors").value : 0 };
   for (const [k, id] of Object.entries(PRINT_FIELDS)) o[k] = +$(id).value;
   const overrides = {};
   for (const row of $("p-thin").querySelectorAll("tr[data-name]")) {
@@ -403,6 +405,20 @@ $("b-print").onclick = async () => {
                             : `${r.watertight_bodies}/${r.bodies} parts watertight`) +
         (extras.length ? " · " + extras.join(" · ") : "");
       box.append(s);
+      if (r.colors && r.colors.length) {
+        // painted 3MF: which color goes in which filament slot
+        const c = document.createElement("div");
+        c.className = "swatches";
+        c.append("Painted for Bambu Studio. Filaments: ");
+        r.colors.forEach((hex, i) => {
+          const sw = document.createElement("span");
+          sw.className = "swatch";
+          sw.title = hex;
+          sw.style.background = hex;
+          c.append(` ${i + 1} `, sw, ` ${hex}`);
+        });
+        box.append(c);
+      }
       showFiles(box, r.downloads);
     }, (err) => { $("p-result").textContent = err.split("\n").slice(-3).join(" "); });
   } catch (e) { $("p-result").textContent = e.message; }

@@ -39,6 +39,7 @@ the bed (z = 0) and centered on the origin.
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from dataclasses import dataclass, field, replace
@@ -126,6 +127,7 @@ class PrintOptions:
     stand_logo: str = ""            # PNG mask of a logo embossed beside the text
     stand_forward_mm: float = 0.0   # move the stand peg toward the nose (+) or tail (-)
     stand_side_mm: float = 0.0      # move the stand peg to the right (+) or left (-)
+    paint_colors: int = 0           # 3MF only: paint the model in this many filament colors (Bambu Studio)
     figure: bool = False            # character figure: the stand goes under its feet
 
     @classmethod
@@ -171,11 +173,198 @@ def load_parts(glb: Path, exclude: list[str]) -> list[tuple[str, trimesh.Trimesh
         if glowing and _is_flat(m):
             continue  # a light sheet; solid glowing trim (nozzle rims) stays
         m.apply_transform(transform)
+        m.metadata["rgb"] = _part_color(geom, mat)  # for painted 3MF exports
+        m.metadata["material"] = mat
         m.visual = trimesh.visual.ColorVisuals(m)
         parts.append((node, m))
     if not parts:
         raise ValueError(f"No printable geometry in {glb.name} (everything was empty or excluded)")
     return parts + _fill_glassless_canopies(scene, dict(parts))
+
+
+NEUTRAL_RGB = (138, 140, 142)   # textured parts whose color lives in the texture
+# surfaces nobody sees on an intact ship: the hull's inside, damage and interior layers
+HIDDEN_SURFACE = re.compile(r"(?i)internal|internals|interior|(^|[_\s])dmg|damage|_int_|/int_|cockpit_int")
+
+
+def _part_color(geom, mat_name: str) -> tuple[int, int, int]:
+    """A part's paint color in sRGB 0-255: its material's base color (stored linear by
+    glTF). Plain white is a textured material whose color is in its texture: neutral grey."""
+    mat = getattr(geom.visual, "material", None)
+    f = getattr(mat, "baseColorFactor", None)
+    if f is None:
+        f = getattr(mat, "diffuse", None)
+    if f is None:
+        return NEUTRAL_RGB
+    lin = np.asarray(f[:3], float) / 255.0
+    if np.all(lin > 0.99) and "white" not in mat_name.lower():
+        return NEUTRAL_RGB
+    srgb = np.where(lin <= 0.0031308, lin * 12.92, 1.055 * np.power(lin, 1 / 2.4) - 0.055)
+    return tuple(int(round(v * 255)) for v in np.clip(srgb, 0, 1))
+
+
+def paint_faces(mesh: trimesh.Trimesh, parts, colors: int, log=print) -> tuple[np.ndarray, list[str]]:
+    """Paint the printed surface from the original model: each output triangle takes the
+    color of the nearest original surface, and the colors are reduced to `colors`
+    filaments (k-means over the colors, weighted by the area they cover). Returns
+    (filament number 1..colors per face, filament colors as #RRGGBB, most used first)."""
+    from scipy.spatial import cKDTree
+    pts, nrm, cols = [], [], []
+    # the hull's inside faces and damage layers sit right behind the skin: leave them out
+    seen = [(n, m) for n, m in parts if not HIDDEN_SURFACE.search(f"{n} {m.metadata.get('material', '')}")] or parts
+    total = sum(len(m.faces) for _, m in seen)
+    step = int(math.ceil(max(1.0, total / 4_000_000)))   # at most ~4M sample points
+    for _, m in seen:
+        c, n = np.asarray(m.triangles_center), np.asarray(m.face_normals)
+        if step > 1:
+            c, n = c[::step], n[::step]
+        pts.append(c)
+        nrm.append(n)
+        cols.append(np.tile(np.array(m.metadata.get("rgb", NEUTRAL_RGB), float), (len(c), 1)))
+    pts, nrm, cols = np.vstack(pts), np.vstack(nrm), np.vstack(cols)
+    # Of the nearest original surfaces, take the closest one facing the same way: on a
+    # thin wing the panel on the far side is about as near, and would speckle the paint.
+    centers, normals = np.asarray(mesh.triangles_center), np.asarray(mesh.face_normals)
+    dist, idx = cKDTree(pts).query(centers, k=8, workers=-1)
+    facing = np.abs(np.einsum("ij,ikj->ik", normals, nrm[idx]))   # game panels face either way
+    score = dist * (1.6 - facing)                                  # nearer and better aligned wins
+    near = idx[np.arange(len(idx)), np.argmin(score, axis=1)]
+    face_rgb = cols[near]
+    area = np.asarray(mesh.area_faces)
+    uniq, inv = np.unique(face_rgb, axis=0, return_inverse=True)
+    inv = inv.ravel()
+    weight = np.bincount(inv, weights=area, minlength=len(uniq))
+    k = int(max(1, min(colors, len(uniq))))
+    # k-means++ seeding then Lloyd, on the few distinct colors (area-weighted)
+    rng = np.random.default_rng(1)
+    centers = [uniq[np.argmax(weight)]]
+    for _ in range(1, k):
+        d = np.min([np.sum((uniq - c) ** 2, axis=1) for c in centers], axis=0) * weight
+        centers.append(uniq[rng.choice(len(uniq), p=d / d.sum())] if d.sum() > 0 else uniq[0])
+    centers = np.array(centers, float)
+    for _ in range(50):
+        lab = np.argmin(((uniq[:, None, :] - centers[None]) ** 2).sum(-1), axis=1)
+        new = np.array([np.average(uniq[lab == j], axis=0, weights=weight[lab == j]) if np.any(lab == j) else centers[j]
+                        for j in range(k)])
+        if np.allclose(new, centers):
+            break
+        centers = new
+    lab = np.argmin(((uniq[:, None, :] - centers[None]) ** 2).sum(-1), axis=1)
+    order = np.argsort(-np.bincount(lab, weights=weight, minlength=k))   # most area first
+    rank = np.empty(k, int)
+    rank[order] = np.arange(k)
+    faces = rank[lab[inv]] + 1
+    faces = _smooth_labels(mesh, faces, k)
+    hexes = ["#%02X%02X%02X" % tuple(int(round(v)) for v in centers[j]) for j in order]
+    log(f"  painted in {k} color(s): {', '.join(hexes)}")
+    return faces.astype(np.int32), hexes
+
+
+def _smooth_labels(mesh: trimesh.Trimesh, labels: np.ndarray, k: int, passes: int = 3) -> np.ndarray:
+    """Clear specks: a triangle takes the color most of its neighbours share when its own
+    is shared by none of them (single stray triangles and small islands shrink away)."""
+    adj = np.asarray(mesh.face_adjacency)
+    if len(adj) == 0:
+        return labels
+    lab = labels.copy()
+    n = len(lab)
+    for _ in range(passes):
+        votes = np.zeros((n, k + 1), np.int32)
+        np.add.at(votes, (adj[:, 0], lab[adj[:, 1]]), 1)
+        np.add.at(votes, (adj[:, 1], lab[adj[:, 0]]), 1)
+        own = votes[np.arange(n), lab]
+        best = np.argmax(votes, axis=1)
+        flip = (own == 0) & (votes.max(axis=1) >= 2)
+        if not flip.any():
+            break
+        lab[flip] = best[flip]
+    return lab
+
+
+def _paint_code(n: int) -> str:
+    """Bambu Studio / PrusaSlicer per-triangle paint state for a whole triangle painted
+    with filament n (the TriangleSelector bit stream, written as hex)."""
+    if n <= 0:
+        return ""
+    if n < 3:
+        return "%X" % (n << 2)
+    return "%XC" % (n - 3)
+
+
+def write_bambu_3mf(out: Path, bodies: list[tuple[str, trimesh.Trimesh]], faces: dict[str, np.ndarray],
+                    colors: list[str], title: str = "model") -> Path:
+    """A 3MF that Bambu Studio opens already painted: each triangle carries its filament
+    (paint_color, and PrusaSlicer's mmu_segmentation for other slicers), and the project
+    lists one filament per color. Bodies without painting take filament 1."""
+    import io
+    import zipfile
+    from xml.sax.saxutils import escape
+    out = Path(out)
+    objects, items = [], []
+    for k, (name, m) in enumerate(bodies, start=1):
+        v = np.asarray(m.vertices, float)
+        f = np.asarray(m.faces, int)
+        paint = faces.get(name)
+        buf = io.StringIO()
+        buf.write(f'  <object id="{k}" type="model" name="{escape(name)}">\n   <mesh>\n    <vertices>\n')
+        buf.writelines(f'     <vertex x="{x:.4f}" y="{y:.4f}" z="{z:.4f}"/>\n' for x, y, z in v)
+        buf.write('    </vertices>\n    <triangles>\n')
+        for i, (a, b, c) in enumerate(f):
+            code = _paint_code(int(paint[i])) if paint is not None else ""
+            extra = f' paint_color="{code}" slic3rpe:mmu_segmentation="{code}"' if code else ""
+            buf.write(f'     <triangle v1="{a}" v2="{b}" v3="{c}"{extra}/>\n')
+        buf.write('    </triangles>\n   </mesh>\n  </object>\n')
+        objects.append(buf.getvalue())
+        items.append(f'  <item objectid="{k}" printable="1"/>\n')
+    model = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+             '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"'
+             ' xmlns:BambuStudio="http://schemas.bambulab.com/package/2021"'
+             ' xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06">\n'
+             f' <metadata name="Title">{escape(title)}</metadata>\n'
+             ' <metadata name="Application">SC Asset Browser</metadata>\n'
+             ' <metadata name="slic3rpe:MmPaintingVersion">1</metadata>\n'
+             ' <resources>\n' + "".join(objects) + ' </resources>\n <build>\n' + "".join(items) + ' </build>\n</model>\n')
+    n = len(colors)
+    project = {
+        "filament_colour": colors,
+        "filament_type": ["PLA"] * n,
+        "filament_settings_id": ["Bambu PLA Basic @BBL X1C"] * n,
+        "filament_ids": ["GFA00"] * n,
+        "filament_vendor": ["Bambu Lab"] * n,
+        "extruder_colour": colors[:1] or ["#FFFFFF"],
+        "flush_volumes_matrix": [str(0 if i == j else 280) for i in range(n) for j in range(n)],
+        "flush_volumes_vector": ["140"] * (2 * n),
+    }
+    # PrusaSlicer's per-object config, which Bambu Studio also reads: each object's
+    # triangles belong to one part (the paint data is kept per part's triangle range)
+    settings = ['<?xml version="1.0" encoding="UTF-8"?>\n<config>\n']
+    for k, (name, m) in enumerate(bodies, start=1):
+        settings.append(f' <object id="{k}" instances_count="1">\n'
+                        f'  <metadata type="object" key="name" value="{escape(name)}"/>\n'
+                        f'  <metadata type="object" key="extruder" value="1"/>\n'
+                        f'  <volume firstid="0" lastid="{len(m.faces) - 1}">\n'
+                        f'   <metadata type="volume" key="name" value="{escape(name)}"/>\n'
+                        f'   <metadata type="volume" key="volume_type" value="ModelPart"/>\n'
+                        f'   <metadata type="volume" key="extruder" value="0"/>\n'
+                        f'   <mesh edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/>\n'
+                        f'  </volume>\n </object>\n')
+    settings.append('</config>\n')
+    content_types = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+                     '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n'
+                     ' <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n'
+                     ' <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>\n'
+                     ' <Default Extension="config" ContentType="text/xml"/>\n</Types>\n')
+    rels = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n'
+            ' <Relationship Target="/3D/3dmodel.model" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>\n'
+            '</Relationships>\n')
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", content_types)
+        z.writestr("_rels/.rels", rels)
+        z.writestr("3D/3dmodel.model", model)
+        z.writestr("Metadata/project_settings.config", json.dumps(project, indent=4))
+        z.writestr("Metadata/Slic3r_PE_model.config", "".join(settings))
+    return out
 
 
 def _fill_glassless_canopies(scene, by_node: dict) -> list[tuple[str, trimesh.Trimesh]]:
@@ -1259,8 +1448,17 @@ def prepare(glb: Path, out: Path, opts: PrintOptions, log=print) -> dict:
         if spec and opts.stand == "peg":
             stand = make_stand_mesh(spec, stand_h, g.pitch, peg=True, smooth=opts.smooth)
             bodies.append(("stand", decimate(stand, STAND_MAX_FACES, log)))
+        painted = None
+        if opts.paint_colors > 0 and fmt == "3mf":
+            # before laying the bodies out: the model still sits where the original parts are
+            painted = paint_faces(mesh, parts, opts.paint_colors, log)
         _layout(bodies)
-        report.update(files=write_bodies(bodies, out, fmt), bodies=len(bodies),
+        if painted:
+            files = [str(write_bambu_3mf(out, bodies, {"model": painted[0]}, painted[1], out.stem))]
+            report["colors"] = painted[1]
+        else:
+            files = write_bodies(bodies, out, fmt)
+        report.update(files=files, bodies=len(bodies),
                       triangles=sum(len(m.faces) for _, m in bodies),
                       watertight=all(m.is_watertight for _, m in bodies),
                       volume_cm3=round(sum(abs(m.volume) for _, m in bodies) / 1000, 2),

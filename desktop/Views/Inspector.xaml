@@ -145,6 +145,8 @@
                             </Grid.RowDefinitions>
                             <ComboBox x:Name="ModeBox" Header="Body" HorizontalAlignment="Stretch" />
                             <ComboBox x:Name="FormatBox" Grid.Column="1" Header="Format" HorizontalAlignment="Stretch" />
+                            <ComboBox x:Name="ColorsBox" Grid.Row="1" Grid.Column="1" Header="Paint colors" HorizontalAlignment="Stretch"
+                                      ToolTipService.ToolTip="3MF only: paint the print in the ship's colors (and the paint picked above), ready for Bambu Studio's AMS. Off prints one color." />
                             <NumberBox x:Name="VoxelBox" Grid.Row="1" Header="Detail (mm)" Minimum="0.05" Maximum="2" SmallChange="0.05"
                                        SpinButtonPlacementMode="Compact"
                                        ToolTipService.ToolTip="Resolution of the solid remesh: 0.1 suits resin, 0.2 to 0.4 suits FDM" />

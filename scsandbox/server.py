@@ -207,9 +207,11 @@ class App:
             raise LookupError("asset not found")
         gear_up, weapons, vtol, flight = b.get("gear") == "up", _weapons(b), bool(b.get("vtol")), bool(b.get("flight"))
         if gear_up or weapons or vtol or flight or _shape_pending(inst, asset, self.settings):
-            getter = lambda variant, log: _posed(inst, self.settings, asset, variant, gear_up, weapons, log, vtol, flight)  # noqa: E731
+            shaped = lambda variant, log: _posed(inst, self.settings, asset, variant, gear_up, weapons, log, vtol, flight)  # noqa: E731
         else:
-            getter = lambda variant, log: models.glb_for(inst, self.settings, asset, variant, log=log)  # noqa: E731
+            shaped = lambda variant, log: models.glb_for(inst, self.settings, asset, variant, log=log)  # noqa: E731
+        paint = str(b.get("paint") or "")  # the livery picked in the viewer (painted 3MF prints, exports)
+        getter = lambda variant, log: paints.painted_glb(inst, self.settings, asset, shaped(variant, log), paint, log)  # noqa: E731
         return asset["name"], getter, False, asset.get("manufacturer") or ""
 
     def job_print(self, channel: str, b: dict, opts: dict):
@@ -367,7 +369,7 @@ PRINT_OPTS = {"size_mm": float, "scale": float, "mode": str, "voxel_mm": float, 
               "min_feature_nozzles": float, "thicken": bool, "hollow_mm": float, "tilt_deg": float,
               "stand": str, "stand_height_mm": float, "part_overrides": dict,
               "stand_shape": str, "stand_text": lambda v: str(v)[:60], "stand_text2": lambda v: str(v)[:60],
-              "stand_scale": bool, "stand_forward_mm": float, "stand_side_mm": float,
+              "stand_scale": bool, "stand_forward_mm": float, "stand_side_mm": float, "paint_colors": int,
               "stand_logo": lambda v: re.sub(r"[^A-Za-z]", "", str(v))[:8]}  # manufacturer code or "auto"
 
 

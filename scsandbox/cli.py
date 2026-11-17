@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import __version__, catalog, config, exporters, installs, models, printlog, printprep, tools
+from . import __version__, catalog, config, exporters, installs, models, paints, printlog, printprep, tools
 
 
 def cmd_installs(a, s):
@@ -119,6 +119,8 @@ def cmd_print(a, s):
         asset = _find_asset(catalog.connect(inst), a.asset)
         print(f"Exporting {asset['name']} from {inst.channel} {inst.version}")
         glb = models.glb_for(inst, s, asset, "print")
+        if a.paint:
+            glb = paints.painted_glb(inst, s, asset, glb, a.paint)
         stem = asset["name"]
         key = asset["record"]
     overrides = {n: {"action": "remove"} for n in a.remove}
@@ -129,7 +131,7 @@ def cmd_print(a, s):
         tilt_deg=a.tilt, stand=a.stand, stand_height_mm=a.stand_height, part_overrides=overrides or None,
         stand_shape="rect" if (a.plate is not None or a.plate_scale) else None,
         stand_text=a.plate if a.plate is not None else (stem if a.plate_scale else None),
-        stand_text2=a.plate2, stand_scale=True if a.plate_scale else None)
+        stand_text2=a.plate2, stand_scale=True if a.plate_scale else None, paint_colors=a.colors)
     if a.list_thin:
         info = printprep.analyze(glb, opts)
         for d in info["slender"]:
@@ -239,6 +241,8 @@ def main(argv=None):
     pr.add_argument("--mode", choices=["solid", "parts"])
     pr.add_argument("--voxel", type=float, help="detail size in mm (solid mode)")
     pr.add_argument("--format", choices=list(printprep.PRINT_FORMATS))
+    pr.add_argument("--paint", metavar="PAINT", help="print in one of the ship's paints (a Paint_... item name)")
+    pr.add_argument("--colors", type=int, metavar="N", help="3MF: paint the print in N filament colors for Bambu Studio")
     pr.add_argument("--nozzle", type=float, help="nozzle width in mm (default 0.4)")
     pr.add_argument("--min-nozzles", type=float, help="thicken features thinner than this many nozzle widths (default 3)")
     pr.add_argument("--no-thicken", action="store_true", help="leave thin parts as they are")
