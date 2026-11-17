@@ -160,6 +160,12 @@ try:
                 plan.append((n, "snap_first" if low.endswith("deploy") else "snap_last"))
             elif FLIGHT_WINGS.search(low):
                 plan.append((n, "snap_last"))
+            elif not is_gear_clip(n) and re.search(r"(^|_|:)wings?_(deploy|extend|unfold|open)(\.caf)?$", low):
+                # wings that spread for flight from a folded export: the Scorpius's,
+                # the Aurora Mk II's, the Fury's
+                plan.append((n, "snap_last"))
+            elif not is_gear_clip(n) and re.search(r"(^|_|:)wings?_(retract|fold|close)(\.caf)?$", low):
+                plan.append((n, "snap_first"))
         if any(FLIGHT_WINGS.search(n.lower()) for n in names):
             # the Stingray's deployed mode also brings its nose cannons out
             for n in names:
@@ -174,8 +180,10 @@ try:
             low = n.lower()
             if re.search(r"(^|_|:)lg_|nozzle|flare|compress|idle", low) or is_gear_clip(n):
                 continue  # not the Fury's "VTOL_Deploy", which is its landing gear
-            m = re.search(r"(vtol|nacelles?)(_mode)?(_(deploy|open|extend|retract|close))?$", low)
-            if not m:
+            # also the Constellation's "rsi_constellation_nacelle_bottom_deploy"; not the
+            # San'tok.yai's component hatches ("components_nacelle_left_open")
+            m = re.search(r"(vtol|nacelles?)(_mode|_bottom|_top|_left|_right|_front|_rear)?(_(deploy|open|extend|retract|close))?(\.caf)?$", low)
+            if not m or "component" in low:
                 continue
             closing = (m.group(4) or "deploy") in ("retract", "close")
             plan.append((n, "snap_first" if closing else "snap_last"))
