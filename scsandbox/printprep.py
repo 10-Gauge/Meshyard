@@ -828,6 +828,20 @@ def drop_loose_bits(g: Grid, log=print) -> int:
     return dropped
 
 
+def drop_small_shells(mesh: trimesh.Trimesh, log=print) -> trimesh.Trimesh:
+    """Remove tiny shells the surface fit leaves behind where a thin bit pinched off
+    (a few cubic mm next to a gun or fin). Returns the mesh without them."""
+    shells = mesh.split(only_watertight=False)
+    if len(shells) <= 1:
+        return mesh
+    vols = np.array([abs(s.volume) for s in shells])
+    keep = [s for s, v in zip(shells, vols) if v >= LOOSE_SHARE * vols.max()]
+    if len(keep) == len(shells):
+        return mesh
+    log(f"  removed {len(shells) - len(keep)} tiny loose shell(s)")
+    return trimesh.util.concatenate(keep)
+
+
 def connect_pieces(g: Grid, min_mm: float, max_gap_mm: float, log=print) -> int:
     """Join loose pieces to the main body with a short strut at their closest point.
 
@@ -1465,7 +1479,7 @@ def prepare(glb: Path, out: Path, opts: PrintOptions, log=print) -> dict:
             cut_socket(g, spec)
         if spec and opts.stand == "attached":
             g = fuse_stand(g, spec, stand_h)
-        mesh = decimate(g.to_mesh(opts.smooth, parts, log), opts.max_faces, log)
+        mesh = drop_small_shells(decimate(g.to_mesh(opts.smooth, parts, log), opts.max_faces, log), log)
         bodies = [("model", mesh)]
         if spec and opts.stand == "peg":
             stand = make_stand_mesh(spec, stand_h, g.pitch, peg=True, smooth=opts.smooth)

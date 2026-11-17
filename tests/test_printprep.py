@@ -436,3 +436,12 @@ def test_loose_bits_are_dropped_but_real_parts_stay():
     g.v[2:12, 33:40, 2:12] = True       # a 700-voxel piece: big enough to keep
     assert printprep.drop_loose_bits(g, log=lambda *_: None) == 1
     assert not g.v[35:37, 35:37, 35:37].any() and g.v[5, 35, 5]
+
+
+def test_tiny_shells_are_dropped_after_the_surface_fit():
+    body = trimesh.creation.box((40, 20, 10))
+    wing = trimesh.creation.box((5, 5, 5)).apply_translation((60, 0, 0))
+    speck = trimesh.creation.box((0.5, 0.5, 0.5)).apply_translation((0, 30, 0))
+    out = printprep.drop_small_shells(trimesh.util.concatenate([body, wing, speck]), log=lambda *_: None)
+    vols = sorted(abs(s.volume) for s in out.split(only_watertight=False))
+    assert vols == pytest.approx([125, 8000])

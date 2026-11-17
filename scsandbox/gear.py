@@ -31,7 +31,7 @@ import numpy as np
 from . import blendertools, models, tools
 from .installs import Install
 
-POSE_VERSION = 14
+POSE_VERSION = 15
 # pose kind -> (cache name, file suffix, what it is in messages)
 KINDS = {"gear": ("gearup", "gearup", "landing gear"),
          "weapons_out": ("weapons_out", "wout", "deployable weapons"),
@@ -379,6 +379,10 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
                     e.kind = kind
                 raise
             tmp.replace(out)
+            try:  # a borrowed clip can leave a gear piece hanging off the hull
+                models.fix_floating_parts(out, log)
+            except Exception as e:  # noqa: BLE001
+                log(f"floating parts check skipped: {e}")
         try:
             pose = pose or pose_for(install, settings, asset, lambda *_: None, kind=kind)
             for name, mv in (pose["blender"].get("objects") or {}).items():
