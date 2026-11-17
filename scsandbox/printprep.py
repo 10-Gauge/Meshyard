@@ -240,7 +240,14 @@ def paint_faces(mesh: trimesh.Trimesh, parts, colors: int, log=print) -> tuple[n
     dist, idx = cKDTree(pts).query(centers, k=8, workers=-1)
     facing = np.abs(np.einsum("ij,ikj->ik", normals, nrm[idx]))   # game panels face either way
     score = dist * (1.6 - facing)                                  # nearer and better aligned wins
-    near = idx[np.arange(len(idx)), np.argmin(score, axis=1)]
+    # Hull layers often lie on top of each other (the Stingray's red paint panels over its
+    # light metal ones); of the candidates about as near as the best, take the outermost,
+    # the one you see. Picking by distance alone flipped between them triangle by triangle.
+    best = np.min(score, axis=1, keepdims=True)
+    close = (score <= best * 1.5 + 0.05) & (facing > 0.6)
+    close[np.arange(len(idx)), np.argmin(score, axis=1)] = True
+    outward = np.einsum("ikj,ij->ik", pts[idx] - centers[:, None, :], normals)
+    near = idx[np.arange(len(idx)), np.argmax(np.where(close, outward, -np.inf), axis=1)]
     face_rgb = cols[near]
     area = np.asarray(mesh.area_faces)
     uniq, inv = np.unique(face_rgb, axis=0, return_inverse=True)
@@ -312,9 +319,9 @@ def _merge_close_colors(centers: np.ndarray, lab: np.ndarray, weight: np.ndarray
     return centers, lab, k
 
 
-def _smooth_labels(mesh: trimesh.Trimesh, labels: np.ndarray, k: int, passes: int = 3) -> np.ndarray:
+def _smooth_labels(mesh: trimesh.Trimesh, labels: np.ndarray, k: int, passes: int = 5) -> np.ndarray:
     """Clear specks: a triangle takes the color most of its neighbours share when its own
-    is shared by none of them (single stray triangles and small islands shrink away)."""
+    is shared by at most one of them (stray triangles and thin strands shrink away)."""
     adj = np.asarray(mesh.face_adjacency)
     if len(adj) == 0:
         return labels
@@ -326,7 +333,9 @@ def _smooth_labels(mesh: trimesh.Trimesh, labels: np.ndarray, k: int, passes: in
         np.add.at(votes, (adj[:, 1], lab[adj[:, 0]]), 1)
         own = votes[np.arange(n), lab]
         best = np.argmax(votes, axis=1)
-        flip = (own == 0) & (votes.max(axis=1) >= 2)
+        # a triangle sharing its color with at most one neighbour, while two or more share
+        # another, takes theirs (stray specks and one-triangle strands both go)
+        flip = (own <= 1) & (votes.max(axis=1) >= 2) & (best != lab)
         if not flip.any():
             break
         lab[flip] = best[flip]
@@ -398,36 +407,12 @@ def write_bambu_3mf(out: Path, bodies: list[tuple[str, trimesh.Trimesh]], faces:
              f' <metadata name="Title">{escape(title)}</metadata>\n'
              ' <metadata name="Application">Meshyard</metadata>\n'
              ' <resources>\n' + palette + "".join(objects) + ' </resources>\n <build>\n' + "".join(items) + ' </build>\n</model>\n')
-    n = len(colors)
-    project = {
-        "filament_colour": colors,
-        "filament_type": ["PLA"] * n,
-        "filament_settings_id": ["Bambu PLA Basic @BBL X1C"] * n,
-        "filament_ids": ["GFA00"] * n,
-        "filament_vendor": ["Bambu Lab"] * n,
-        "extruder_colour": colors[:1] or ["#FFFFFF"],
-        "flush_volumes_matrix": [str(0 if i == j else 280) for i in range(n) for j in range(n)],
-        "flush_volumes_vector": ["140"] * (2 * n),
-    }
-    # PrusaSlicer's per-object config, which Bambu Studio also reads: each object's
-    # triangles belong to one part (the paint data is kept per part's triangle range)
-    settings = ['<?xml version="1.0" encoding="UTF-8"?>\n<config>\n']
-    for k, (name, m) in enumerate(bodies, start=1):
-        settings.append(f' <object id="{k}" instances_count="1">\n'
-                        f'  <metadata type="object" key="name" value="{escape(name)}"/>\n'
-                        f'  <metadata type="object" key="extruder" value="1"/>\n'
-                        f'  <volume firstid="0" lastid="{len(m.faces) - 1}">\n'
-                        f'   <metadata type="volume" key="name" value="{escape(name)}"/>\n'
-                        f'   <metadata type="volume" key="volume_type" value="ModelPart"/>\n'
-                        f'   <metadata type="volume" key="extruder" value="0"/>\n'
-                        f'   <mesh edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/>\n'
-                        f'  </volume>\n </object>\n')
-    settings.append('</config>\n')
+    # Only the model: with Meshyard's own settings files beside it, Bambu Studio skipped
+    # the colors and opened the ship all grey.
     content_types = ('<?xml version="1.0" encoding="UTF-8"?>\n'
                      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n'
                      ' <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n'
-                     ' <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>\n'
-                     ' <Default Extension="config" ContentType="text/xml"/>\n</Types>\n')
+                     ' <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>\n</Types>\n')
     rels = ('<?xml version="1.0" encoding="UTF-8"?>\n'
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n'
             ' <Relationship Target="/3D/3dmodel.model" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>\n'
@@ -436,8 +421,6 @@ def write_bambu_3mf(out: Path, bodies: list[tuple[str, trimesh.Trimesh]], faces:
         z.writestr("[Content_Types].xml", content_types)
         z.writestr("_rels/.rels", rels)
         z.writestr("3D/3dmodel.model", model)
-        z.writestr("Metadata/project_settings.config", json.dumps(project, indent=4))
-        z.writestr("Metadata/Slic3r_PE_model.config", "".join(settings))
     return out
 
 
