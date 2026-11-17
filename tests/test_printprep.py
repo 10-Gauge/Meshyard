@@ -515,3 +515,15 @@ def test_stand_faces_are_labeled_base_and_text_and_take_their_filaments():
     colors, slots = printprep.stand_filaments(opts, ["#8A8C8E", "#000000"])
     assert colors == ["#8A8C8E", "#000000", "#E4BD68"]      # black reused, gold added
     assert slots == {0: 2, 1: 2, 2: 3, 3: 2}                # logo and second line follow the base
+
+
+def test_colors_nobody_can_tell_apart_share_a_filament():
+    import numpy as np
+    from scsandbox import printprep
+    centers = np.array([[64, 64, 64], [42, 42, 42], [191, 13, 13]], float)
+    lab = np.array([0, 1, 2])
+    weight = np.array([3.0, 1.0, 2.0])
+    c, lab2, k = printprep._merge_close_colors(centers, lab, weight, 3)
+    assert k == 2 and list(lab2) == [0, 0, 1]
+    assert round(c[0][0]) == round((64 * 3 + 42) / 4)    # area-weighted mix
+    assert list(c[1]) == [191, 13, 13]                   # red stays its own

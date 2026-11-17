@@ -262,6 +262,10 @@ def paint_faces(mesh: trimesh.Trimesh, parts, colors: int, log=print) -> tuple[n
             break
         centers = new
     lab = np.argmin(((uniq[:, None, :] - centers[None]) ** 2).sum(-1), axis=1)
+    # Colors nobody could tell apart share a filament: the Stingray's black matte metal and
+    # its dark secondary panels lie on top of each other, and as two filaments the wings
+    # came out blotched in both.
+    centers, lab, k = _merge_close_colors(centers, lab, weight, k)
     order = np.argsort(-np.bincount(lab, weights=weight, minlength=k))   # most area first
     rank = np.empty(k, int)
     rank[order] = np.arange(k)
@@ -270,6 +274,42 @@ def paint_faces(mesh: trimesh.Trimesh, parts, colors: int, log=print) -> tuple[n
     hexes = ["#%02X%02X%02X" % tuple(int(round(v)) for v in centers[j]) for j in order]
     log(f"  painted in {k} color(s): {', '.join(hexes)}")
     return faces.astype(np.int32), hexes
+
+
+# Filament colors closer than this (CIE76 delta E) are merged into one
+SAME_COLOR_DE = 12.0
+
+
+def _lab(rgb: np.ndarray) -> np.ndarray:
+    """sRGB 0-255 to CIE L*a*b* (D65)."""
+    c = np.asarray(rgb, float) / 255.0
+    lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    xyz = lin @ np.array([[0.4124, 0.3576, 0.1805], [0.2126, 0.7152, 0.0722], [0.0193, 0.1192, 0.9505]]).T
+    xyz /= np.array([0.95047, 1.0, 1.08883])
+    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16 / 116)
+    return np.stack([116 * f[..., 1] - 16, 500 * (f[..., 0] - f[..., 1]), 200 * (f[..., 1] - f[..., 2])], -1)
+
+
+def _merge_close_colors(centers: np.ndarray, lab: np.ndarray, weight: np.ndarray, k: int):
+    """Merge the two nearest filament colors while they're within SAME_COLOR_DE; the
+    merged color is their area-weighted mix. Returns (centers, labels, k)."""
+    centers = np.array(centers, float)
+    lab = lab.copy()
+    while k > 1:
+        L = _lab(centers)
+        d = np.sqrt(((L[:, None] - L[None]) ** 2).sum(-1))
+        np.fill_diagonal(d, np.inf)
+        i, j = np.unravel_index(np.argmin(d), d.shape)
+        if d[i, j] >= SAME_COLOR_DE:
+            break
+        i, j = min(i, j), max(i, j)
+        wi, wj = weight[lab == i].sum(), weight[lab == j].sum()
+        centers[i] = (centers[i] * wi + centers[j] * wj) / max(wi + wj, 1e-9)
+        lab[lab == j] = i
+        lab[lab > j] -= 1
+        centers = np.delete(centers, j, axis=0)
+        k -= 1
+    return centers, lab, k
 
 
 def _smooth_labels(mesh: trimesh.Trimesh, labels: np.ndarray, k: int, passes: int = 3) -> np.ndarray:
