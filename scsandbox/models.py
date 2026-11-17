@@ -59,6 +59,7 @@ def glb_for(install: Install, settings: dict, asset: dict, variant: str = "previ
                     complete_weapon(out, install, settings, asset, log)
                 place_interiors(out, install, asset, log)
                 reattach_orphans(out, log)
+                fix_port_parts(out, log)
                 fix_tagged_geometry(out, install, settings, log)
                 drop_empty_meshes(out, log)
                 fix_item_meshes(out, log)
@@ -78,6 +79,7 @@ def glb_for(install: Install, settings: dict, asset: dict, variant: str = "previ
                 if out.exists():
                     place_interiors(out, install, asset, log)
                     reattach_orphans(out, log)
+                    fix_port_parts(out, log)
                     fix_tagged_geometry(out, install, settings, log)
                     drop_empty_meshes(out, log)
                     fix_item_meshes(out, log)
@@ -460,6 +462,99 @@ def reattach_orphans(glb: Path, log=print) -> int:
         log(f"couldn't update {glb.name} yet ({e.strerror}); it's repaired next time it's loaded")
         return 0
     return moved
+
+
+def _node_matrix(nd: dict):
+    import numpy as np
+    if "matrix" in nd:
+        return np.array(nd["matrix"], dtype=float).reshape(4, 4).T
+    x, y, z, w = nd.get("rotation", [0.0, 0.0, 0.0, 1.0])
+    r = np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                  [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                  [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+    m = np.eye(4)
+    m[:3, :3] = r * np.array(nd.get("scale", [1.0, 1.0, 1.0]))
+    m[:3, 3] = nd.get("translation", [0.0, 0.0, 0.0])
+    return m
+
+
+def mount_port_parts(doc: dict) -> list[tuple[str, str]]:
+    """Hang a modular weapon's parts on the ports of the weapon they belong to.
+
+    Ship guns are built from parts: the Ares Inferno's Behring gatling has a barrel,
+    firing mechanism, power array and ventilation, each mounted on a port of the gun
+    ("hardpoint_bar", "hardpoint_mec", "hardpoint_pow", "hardpoint_ven"). StarBreaker
+    puts each part at its port's position but hangs it on the ship with the ship's
+    rotation, not the port's. Where the gun is mounted rolled (the Ares's sits on its
+    side) the parts come out turned 90 degrees: the ventilation box stuck out beside the
+    gun instead of sitting inside its housing. A part is recognized by its port's name
+    inside its own model name ("behr_bal_gat_s7_ven_1" for "hardpoint_ven") and by
+    sitting exactly at the port. Returns (part, port) names moved."""
+    import numpy as np
+    nodes = doc.get("nodes", [])
+    parent = {}
+    for i, nd in enumerate(nodes):
+        for c in nd.get("children", []):
+            parent.setdefault(c, i)
+    cache: dict[int, object] = {}
+
+    def world(i, seen=()):
+        if i not in cache:
+            p = parent.get(i)
+            up = world(p, seen + (i,)) if p is not None and p not in seen else np.eye(4)
+            cache[i] = up @ _node_matrix(nodes[i])
+        return cache[i]
+
+    def ancestors(i):
+        out, k = set(), i
+        while k in parent and parent[k] not in out:
+            k = parent[k]
+            out.add(k)
+        return out
+
+    ports = [i for i, nd in enumerate(nodes)
+             if re.fullmatch(r"(?i)hardpoint_[a-z]{3,}", nd.get("name", "")) and not nd.get("children")]
+    moved = []
+    for h in ports:
+        suffix = nodes[h]["name"].split("_", 1)[1].lower()
+        token = re.compile(rf"(?i)_{re.escape(suffix)}(?:_|\d|$)")
+        hw, above = world(h), ancestors(h)
+        for c in list(parent):
+            nd = nodes[c]
+            if c == h or c in above or nd.get("name", "").lower().startswith("hardpoint_"):
+                continue
+            if parent[c] not in above:
+                continue  # only parts hung on something the port's weapon also hangs from
+            names = [nd.get("name", "")] + [nodes[k].get("name", "") for k in nd.get("children", [])]
+            if not any(token.search(n.replace("\\", "/").split("/")[-1]) for n in names):
+                continue
+            cw = world(c)
+            if np.linalg.norm(cw[:3, 3] - hw[:3, 3]) > 1e-3 or np.allclose(cw[:3, :3], hw[:3, :3], atol=1e-4):
+                continue
+            nodes[parent[c]]["children"].remove(c)
+            nodes[h].setdefault("children", []).append(c)
+            for k in ("matrix", "translation", "rotation", "scale"):
+                nd.pop(k, None)
+            parent[c] = h
+            cache.clear()
+            moved.append((nd.get("name", str(c)), nodes[h]["name"]))
+            break
+    return moved
+
+
+def fix_port_parts(glb: Path, log=print) -> int:
+    moved = []
+
+    def edit(doc) -> bool:
+        moved.extend(mount_port_parts(doc))
+        return bool(moved)
+
+    try:
+        if _edit_glb_json(glb, edit):
+            log(f"turned {len(moved)} weapon part(s) to match their mount: " + ", ".join(p for p, _ in moved))
+    except OSError:
+        glb.with_name(glb.name + ".tmp").unlink(missing_ok=True)
+    return len(moved)
 
 
 # ---------- tagged variant geometry ----------
