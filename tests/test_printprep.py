@@ -357,3 +357,17 @@ def test_stand_peg_stays_off_a_fin_and_can_be_moved():
     moved = printprep.plan_stand(g, printprep.PrintOptions(size_mm=120, stand="peg", stand_forward_mm=-30),
                                  log=lambda *_: None)
     assert moved.y < s.y - 20                         # toward the tail
+
+
+def test_solid_glow_trim_prints_but_flat_glow_sheets_do_not(tmp_path):
+    """The Alpha Wolf's nozzle rims are glow-named solid parts; light strips are flat."""
+    sc = trimesh.Scene()
+    sc.add_geometry(trimesh.creation.box((4, 1, 8)), node_name="hull", geom_name="hull")
+    sc.add_geometry(trimesh.creation.annulus(0.3, 0.5, 0.4), node_name="glow_thruster_main", geom_name="rim",
+                    transform=trimesh.transformations.translation_matrix([0, 0, 4.5]))
+    sc.add_geometry(trimesh.creation.box((2, 0.004, 0.5)), node_name="glow_strip", geom_name="strip",
+                    transform=trimesh.transformations.translation_matrix([0, 0.51, 0]))
+    glb = tmp_path / "ship.glb"
+    sc.export(glb)
+    names = {n for n, _ in printprep.load_parts(glb, [])}
+    assert "glow_thruster_main" in names and "glow_strip" not in names

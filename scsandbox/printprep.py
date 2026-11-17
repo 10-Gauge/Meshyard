@@ -80,6 +80,22 @@ NOT_A_SURFACE = re.compile(r"(?i)helper|proxy|nodraw|no_draw|invisible|physics|c
 # The same overlays as material layers inside ordinary parts (needs material names in
 # the export, so the print export keeps them).
 OVERLAY_MATERIAL = re.compile(r"(?i)(pom|decal|glow|rtt_|emissive)")
+# Glow and emissive parts are usually flat light sheets, but some are solid trim: the
+# Alpha Wolf's thruster nozzle rims are "glow_thruster_main" / "Glow_Trim" parts. Those
+# are kept unless they are flat: thinner than this share of their length, or than
+# GLOW_MIN_M (game meters; overlays sit a few millimeters off the hull).
+GLOW = re.compile(r"(?i)glow|emissive")
+FLAT_SHARE = 0.03
+GLOW_MIN_M = 0.02
+
+
+def _is_flat(m: trimesh.Trimesh) -> bool:
+    """A sheet (decal, light strip) rather than a solid shape."""
+    try:
+        ext = np.sort(m.bounding_box_oriented.primitive.extents)
+    except Exception:
+        ext = np.sort(m.extents)
+    return ext[-1] <= 0 or ext[0] <= max(FLAT_SHARE * ext[-1], GLOW_MIN_M)
 
 
 @dataclass
@@ -128,7 +144,9 @@ class PrintOptions:
 def load_parts(glb: Path, exclude: list[str]) -> list[tuple[str, trimesh.Trimesh]]:
     scene = trimesh.load(str(glb), force="scene")
     soft = [re.compile(p) for p in exclude if HELPER_PATTERN.search(p)]
-    patterns = [re.compile(p) for p in [*exclude, *OVERLAY_NODES] if not HELPER_PATTERN.search(p)]
+    patterns = [re.compile(p) for p in [*exclude, *OVERLAY_NODES] if not HELPER_PATTERN.search(p)
+                and not GLOW.search(p)]
+    glow_nodes = [re.compile(p) for p in [*exclude, *OVERLAY_NODES] if GLOW.search(p)]
     parts = []
     for node in scene.graph.nodes_geometry:
         try:
@@ -143,12 +161,15 @@ def load_parts(glb: Path, exclude: list[str]) -> list[tuple[str, trimesh.Trimesh
         mat = getattr(getattr(geom.visual, "material", None), "name", None) or ""
         if any(p.search(node) or p.search(geom_name) for p in soft) and (not mat or NOT_A_SURFACE.search(mat)):
             continue
-        if mat and OVERLAY_MATERIAL.search(mat):
-            continue  # decal / parallax / glow layer inside an otherwise normal part
+        glowing = any(p.search(node) or p.search(geom_name) for p in glow_nodes) or bool(mat and GLOW.search(mat))
+        if mat and OVERLAY_MATERIAL.search(mat) and not GLOW.search(mat):
+            continue  # decal / parallax layer inside an otherwise normal part
         m = geom.copy()
         # glTF primitives often share one vertex buffer; trimesh keeps the whole buffer
         # on each part, and those foreign vertices would land all over the model.
         m.remove_unreferenced_vertices()
+        if glowing and _is_flat(m):
+            continue  # a light sheet; solid glowing trim (nozzle rims) stays
         m.apply_transform(transform)
         m.visual = trimesh.visual.ColorVisuals(m)
         parts.append((node, m))
