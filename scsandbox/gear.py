@@ -31,7 +31,7 @@ import numpy as np
 from . import blendertools, models, tools
 from .installs import Install
 
-POSE_VERSION = 3
+POSE_VERSION = 4
 # pose kind -> (cache name, file suffix, what it is in messages)
 KINDS = {"gear": ("gearup", "gearup", "landing gear"),
          "weapons_out": ("weapons_out", "wout", "deployable weapons"),
@@ -301,6 +301,11 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
         out = glb.with_name(glb.name[:-4] + f".{KINDS[kind][1]}.glb")
         if out.exists() and not _pose_current(install, asset, kind):
             out.unlink(missing_ok=True)  # worked out by an older version of the pose rules
+        try:
+            if out.exists() and _pose_path(install, asset, kind).stat().st_mtime > out.stat().st_mtime:
+                out.unlink(missing_ok=True)  # the pose was worked out again since
+        except (OSError, AttributeError, TypeError):
+            pass
         if not (out.exists() and out.stat().st_mtime >= glb.stat().st_mtime):
             try:
                 pose = pose_for(install, settings, asset, log, kind=kind)

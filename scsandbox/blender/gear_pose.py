@@ -201,6 +201,17 @@ try:
             po.apply_animation_mode_to_package_root(bpy.context, root, n, mode)
             taken |= parts
             result["clips"].append({"name": n, "mode": mode, "objects": len(parts)})
+    if kind == "landed" and result.get("gear_down"):
+        # Gear down on a ship exported gear up: the ship's own clip (the Stingray's wing
+        # fold) and the gear items' extend clip overlap, but both end gear down. Lay the
+        # gear's own clips on top so the struts extend instead of staying compressed.
+        base = lambda n: re.sub(r"^fragment:\d+:", "", n).lower()  # noqa: E731
+        used = {base(c["name"]) for c in result["clips"]}
+        for n, mode, parts in tried:
+            if parts and base(n) not in used and (n, mode) in gear_plan(False):
+                po.apply_animation_mode_to_package_root(bpy.context, root, n, mode)
+                used.add(base(n))
+                result["clips"].append({"name": n, "mode": mode, "objects": len(parts), "layered": True})
     bpy.context.view_layer.update()
     for o in objs:
         b, p = bind[o.name], o.matrix_world
