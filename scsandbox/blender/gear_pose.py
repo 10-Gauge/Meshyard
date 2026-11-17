@@ -19,6 +19,7 @@ import sys
 
 import addon_utils
 import bpy
+from mathutils import Vector
 
 # Ships whose "wings_deploy" ends (and "wings_retract" starts) in their landed shape (the
 # export's pose), not their flight shape: the Reliant lands with its wings flat and flies
@@ -159,6 +160,8 @@ try:
                     continue
                 if re.sub(r"^fragment:\d+:", "", n) in names:
                     continue
+            if re.search(r"(?i)canopy|cockpit", n):
+                continue  # canopy clips are often authored opening whatever their name: tags only
             plan.append((n, "snap_last" if m.group(1) in ("close", "retract") else "snap_first"))
     elif kind == "flight":
         # flight mode: the Stingray opens its flaps ("flap_deploy", "fap_retract") and draws
@@ -258,6 +261,7 @@ try:
                 po.apply_animation_mode_to_package_root(bpy.context, root, n, mode)
                 parts = moved_now()
                 best = max(best, len(parts))
+                gear_parts.update(parts)
                 if parts:
                     dz = [bind[k].translation.z - bpy.data.objects[k].matrix_world.translation.z for k in parts]
                     drop += sum(dz)
@@ -267,20 +271,42 @@ try:
         reset()
         return best, drop
 
+    gear_parts: set = set()
+
+    def gear_hangs_below():
+        """In the export, does the gear reach below the rest of the ship? Then the export
+        has its gear down, whatever the clips say (the F7C-R Mk II plays the F7A's gear
+        clip, which fits its legs badly and lowers them from either end)."""
+        def lowest(names):
+            zs = [(o.matrix_world @ Vector(c)).z for o in objs if o.name in names and o.type == "MESH" for c in o.bound_box]
+            return min(zs) if zs else None
+        gear_low = lowest(gear_parts)
+        hull_low = lowest({o.name for o in objs if o.type == "MESH"} - gear_parts)
+        if gear_low is None or hull_low is None:
+            return False
+        zs = [(o.matrix_world @ Vector(c)).z for o in objs if o.type == "MESH" for c in o.bound_box]
+        height = (max(zs) - min(zs)) if zs else 0.0
+        return gear_low < hull_low - 0.03 * height
+
     if kind == "landed":
         # Most ships are exported gear down. A few (the Stingray, the Reclaimer) come gear
         # up: their landed shape puts the gear down as well. Told apart by part counts, or
         # by how far the gear drops: the Reclaimer's clips start from a rest pose that isn't
         # the export's, so both ends move its legs, but the down end lowers them much more.
         (up, up_drop), (down, down_drop) = most_moved(gear_plan(True)), most_moved(gear_plan(False))
-        result["gear_check"] = [up, round(up_drop, 1), down, round(down_drop, 1)]
+        hangs = gear_hangs_below()
+        result["gear_check"] = [up, round(up_drop, 1), down, round(down_drop, 1), hangs]
         # The Ironclad's and Basher's clips move whole legs: a handful of parts, all
         # still at rest in the export with the gear up.
         # A ship exported gear down lifts its gear going up (the Gladius: its gear-down end
         # just stretches the struts a little past the export's), so the drop test only
         # counts when going up doesn't lift much.
-        if (down > 20 and (up * 4 < down or (down_drop > max(20.0, 1.3 * up_drop) and up_drop > -0.5 * abs(down_drop)))) \
-                or (up == 0 and down > 0 and down_drop > 0.3):
+        # When both ends lower the gear (clips that don't fit the model's own legs: the
+        # Reclaimer's rest pose, the F7C-R Mk II borrowing the F7A's clip), only an export
+        # whose gear doesn't already hang below the hull is gear up.
+        by_drop = down_drop > max(20.0, 1.3 * up_drop) and up_drop > -0.5 * abs(down_drop) \
+            and not (hangs and up_drop > 0.5 * down_drop)
+        if (down > 20 and (up * 4 < down or by_drop)) or (up == 0 and down > 0 and down_drop > 0.3):
             plan += gear_plan(False)
             result["gear_down"] = True
 
