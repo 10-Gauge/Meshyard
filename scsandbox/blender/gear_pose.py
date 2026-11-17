@@ -64,7 +64,8 @@ try:
         pass
     result["available"] = names
     plan = []
-    gear = re.compile(r"(?i)(landing_?gears?|(^|_)lg_|gear)")
+    # "landing_gear_retract", "lg_extend", and the Gatac Railen's "landing_deploy"
+    gear = re.compile(r"(?i)(landing_?gears?|(^|_)lg_|gear|(^|_|:)landing_(deploy|retract|extend))")
 
     def gear_plan(up):
         out = []
@@ -99,6 +100,13 @@ try:
                 plan.append((n, "snap_first"))
             elif re.search(r"^fragment:0:aegs_eclipse_gun_bay$", low):
                 plan.append((n, "snap_last"))
+    elif kind == "closed":
+        # doors and airlocks the export leaves open (the Gatac Railen's rear airlock):
+        # close them so the hull has no hole
+        for n in names:
+            m = re.search(r"(?:^|_|:)(?:doors?|airlock|hatch)_(close|open)$", n.lower())
+            if m:
+                plan.append((n, "snap_last" if m.group(1) == "close" else "snap_first"))
     elif kind == "flight":
         # flight mode: the Stingray opens its flaps ("flap_deploy", "fap_retract") and draws
         # its wings in; ships exported in their landed shape spread their wings: the

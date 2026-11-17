@@ -317,7 +317,10 @@ def _shape_pending(inst, asset, settings) -> bool:
     shape is known, or not worked out yet (and Blender is there to do it)."""
     if asset.get("category") != "spaceships":
         return False
-    return gear.has_landed_shape(inst, asset) or (gear.landed_unknown(inst, asset) and gear.blender_available(settings))
+    if gear.has_landed_shape(inst, asset) or gear.has_shape(inst, asset, "closed"):
+        return True
+    unknown = gear.landed_unknown(inst, asset) or not gear._shape_known(inst, asset, "closed")
+    return unknown and gear.blender_available(settings)
 
 
 def _weapons(b: dict) -> str | None:
