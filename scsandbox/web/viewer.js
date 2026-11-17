@@ -65,10 +65,13 @@ export function createViewer(el, { onMessage } = {}) {
       // the grid on screen, so drop them and rely on the viewer's own lighting.
       const lights = [];
       // COLOR_0 holds the game's tint/wear masks, not paint; drawn as color it turns ships purple.
+      // Game meshes are full of one-sided panels (the Alpha Wolf's nozzle petals face inward):
+      // seen from behind they vanish, so draw both sides.
       current.traverse((o) => {
         if (o.isLight) lights.push(o);
         for (const m of o.isMesh ? [].concat(o.material) : []) {
           if (m.vertexColors) { m.vertexColors = false; m.needsUpdate = true; }
+          if (m.side !== THREE.DoubleSide) { m.side = THREE.DoubleSide; m.needsUpdate = true; }
         }
       });
       for (const l of lights) l.removeFromParent();
