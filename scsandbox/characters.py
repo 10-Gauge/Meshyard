@@ -232,10 +232,11 @@ def weapon_kind(install: Install, asset: dict) -> str:
 SKELETONS = {"male": "Objects/Characters/Human/male_v7/export/bhm_skeleton_v7.chrparams",
              "female": "Objects/Characters/Human/female_v2/export/bhf_skeleton_v2.chrparams"}
 STANCE_DBAS = ("weapons/stocked/locomotion/stand.dba", "weapons/stocked/locomotion/crouch.dba",
+               "weapons/stocked/locomotion/stand/relaxed.dba",
                "weapons/pistol/locomotion/stand.dba", "weapons/pistol/locomotion/crouch.dba",
                "weapons/shouldered/locomotion/stand.dba", "weapons/shouldered/locomotion/crouch.dba",
                "weapons/no_weapon/locomotion/stand.dba")
-STANCES_VERSION = 1
+STANCES_VERSION = 2
 
 
 def stance_clips(install: Install, settings: dict, body: str, log=print):
@@ -267,6 +268,7 @@ def stance_clips(install: Install, settings: dict, body: str, log=print):
             glbs = sorted(conv.rglob("*.glb"), key=lambda q: q.stat().st_mtime, reverse=True)
             if not glbs:
                 raise tools.ToolError("cgf-converter wrote no file")
+            out.parent.mkdir(parents=True, exist_ok=True)   # no skins folder yet on a fresh install
             glbs[0].replace(out)
         except (tools.ToolError, OSError) as e:
             log(f"  game stances unavailable, using built-in ones: {str(e)[-200:]}")
@@ -410,7 +412,7 @@ def build(install: Install, settings: dict, con, body: str, picks: dict, head: s
     return out, name
 
 
-POSE_VERSION = 17  # bump when pose definitions change, so cached figures are rebuilt
+POSE_VERSION = 20  # bump when pose definitions change, so cached figures are rebuilt
 
 
 def figure_path(install: Install, name: str) -> Path:
