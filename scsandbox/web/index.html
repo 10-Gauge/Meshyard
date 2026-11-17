@@ -122,6 +122,15 @@
         <label>Stand height <input id="p-standh" type="number" min="5" max="300" step="5"> mm</label>
         <label title="Move the stand's peg toward the nose (+) or the tail (-) from where the app puts it, for example off a fin">Peg forward <input id="p-standfwd" type="number" step="1" value="0"> mm</label>
         <label title="Move the stand's peg to the right (+) or the left (-) from where the app puts it">Peg right <input id="p-standside" type="number" step="1" value="0"> mm</label>
+        <label title="Two posts, fore and aft, for long or heavy prints">Posts
+          <select id="p-posts"><option value="1">1</option><option value="2">2 (fore and aft)</option></select>
+        </label>
+        <label title="Base width along the ship (a round base's diameter). 0 sizes it from the model">Base width <input id="p-basew" type="number" min="0" max="600" step="5" value="0"> mm</label>
+        <label title="Rectangular base depth, front to back. 0 sizes it from the model">Base depth <input id="p-based" type="number" min="0" max="400" step="5" value="0"> mm</label>
+        <label title="Painted 3MF (Paint colors on): the base and post filament">Base color <select id="p-colbase" class="filament"></select></label>
+        <label title="Painted 3MF: the logo's filament">Logo color <select id="p-collogo" class="filament"></select></label>
+        <label title="Painted 3MF: the plate's first line">Text color <select id="p-coltext" class="filament"></select></label>
+        <label title="Painted 3MF: the plate's second line">Second line color <select id="p-coltext2" class="filament"></select></label>
         <label title="Shows the ship in the viewer on the stand these settings make, seen from the stand's front: base, post, height, incline and tilt. The viewer's stand is a simple stand-in: the exported one adds the name plate, lettering, logo and beveled front."><input id="p-standview" type="checkbox"> Show on stand</label>
         <span id="p-pegnote" class="muted"></span>
         <label title="Nose up (negative: nose down). The nose points to the right of the stand, seen from the front.">Incline <input id="p-tilt" type="number" min="-45" max="45" step="5"> °</label>

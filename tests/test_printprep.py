@@ -474,3 +474,44 @@ def test_ships_face_nose_right_and_incline_and_tilt_about_the_stand():
     assert up["nose"][2] > up["body"][2] + 5
     bank = posed(roll=20)
     assert bank["wing"][2] < bank["body"][2] - 3
+
+
+def _long_ship_grid():
+    g = printprep.Grid([0, 0, 0], [200, 40, 30], 0.5, pad=2)
+    g.v[20:380, 20:60, 30:50] = True        # a long belly slab, 200 mm x 20 mm
+    return g
+
+
+def test_two_posts_go_fore_and_aft_and_the_base_spans_them():
+    g = _long_ship_grid()
+    s = printprep.plan_stand(g, printprep.PrintOptions(size_mm=200, stand="peg", stand_posts=2,
+                                                      stand_shape="rect"), log=lambda *_: None)
+    posts = printprep.all_posts(s)
+    assert len(posts) == 2
+    xs = sorted(p[0] for p in posts)
+    assert xs[1] - xs[0] > 60                              # well apart along the ship
+    x0, x1, _, _ = printprep._base_box(s)
+    assert x0 < xs[0] - s.post_r and x1 > xs[1] + s.post_r   # both stand on the base
+
+
+def test_base_size_override_and_balance_check():
+    g = _long_ship_grid()
+    big = printprep.plan_stand(g, printprep.PrintOptions(size_mm=200, stand="peg", stand_shape="rect",
+                                                        stand_base_w_mm=180, stand_base_d_mm=90), log=lambda *_: None)
+    assert big.base_w == 180 and big.base_d == 90 and big.balance > 0
+    small = printprep.plan_stand(g, printprep.PrintOptions(size_mm=200, stand="peg", stand_shape="round",
+                                                          stand_base_w_mm=20, stand_forward_mm=80),
+                                 log=lambda *_: None)
+    assert small.balance < 0                              # balance point off a tiny base, far from the peg
+
+
+def test_stand_faces_are_labeled_base_and_text_and_take_their_filaments():
+    s = printprep.StandSpec(0.0, 0.0, 40.0, 4.0, 2.2, 6.0, 30.0)
+    printprep._plan_rect(s, 150, 60, "STINGRAY", "Kruger")
+    m = printprep.make_stand_mesh(s, 30.0, 0.3, peg=True, smooth=True, preview=True)
+    lab = printprep.stand_face_labels(m.vertices, m.faces, s, 0.0, 30.0)
+    assert (lab == 0).sum() > (lab == 2).sum() > 0 and (lab == 3).sum() > 0 and (lab >= 0).all()
+    opts = printprep.PrintOptions(stand_base_color="#000000", stand_text_color="#E4BD68")
+    colors, slots = printprep.stand_filaments(opts, ["#8A8C8E", "#000000"])
+    assert colors == ["#8A8C8E", "#000000", "#E4BD68"]      # black reused, gold added
+    assert slots == {0: 2, 1: 2, 2: 3, 3: 2}                # logo and second line follow the base

@@ -144,8 +144,8 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <ComboBox x:Name="ModeBox" Header="Body" HorizontalAlignment="Stretch" />
-                            <ComboBox x:Name="FormatBox" Grid.Column="1" Header="Format" HorizontalAlignment="Stretch" />
-                            <ComboBox x:Name="ColorsBox" Grid.Row="1" Grid.Column="1" Header="Paint colors" HorizontalAlignment="Stretch"
+                            <ComboBox x:Name="FormatBox" Grid.Column="1" Header="Format" HorizontalAlignment="Stretch" SelectionChanged="Paint_Toggled" />
+                            <ComboBox x:Name="ColorsBox" Grid.Row="1" Grid.Column="1" Header="Paint colors" HorizontalAlignment="Stretch" SelectionChanged="Paint_Toggled"
                                       ToolTipService.ToolTip="3MF only: paint the print in the ship's colors (and the paint picked above), ready for Bambu Studio's AMS. Off prints one color." />
                             <NumberBox x:Name="VoxelBox" Grid.Row="1" Header="Detail (mm)" Minimum="0.05" Maximum="2" SmallChange="0.05"
                                        SpinButtonPlacementMode="Compact"
@@ -188,6 +188,9 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <ComboBox x:Name="ShapeBox" Header="Base" HorizontalAlignment="Stretch" SelectionChanged="Stand_Changed" />
                             <NumberBox x:Name="StandHBox" Grid.Column="1" Header="Stand height (mm)" Minimum="5" Maximum="300" SmallChange="5"
@@ -207,6 +210,23 @@
                             <NumberBox x:Name="PegSideBox" Grid.Row="2" Grid.Column="1" Header="Peg right (mm)" Minimum="-500" Maximum="500" SmallChange="2"
                                        SpinButtonPlacementMode="Compact" ValueChanged="Peg_Changed"
                                        ToolTipService.ToolTip="Moves the stand's peg to the right (negative: to the left)" />
+                            <ComboBox x:Name="PostsBox" Grid.Row="3" Grid.Column="1" Header="Posts" HorizontalAlignment="Stretch"
+                                      SelectionChanged="StandSetting_Changed"
+                                      ToolTipService.ToolTip="Two posts, fore and aft, for long or heavy prints" />
+                            <NumberBox x:Name="BaseWBox" Grid.Row="4" Header="Base width (mm)" Minimum="0" Maximum="600" SmallChange="5"
+                                       SpinButtonPlacementMode="Compact" ValueChanged="Peg_Changed"
+                                       ToolTipService.ToolTip="Base width along the ship (a round base's diameter). 0 sizes it from the model" />
+                            <NumberBox x:Name="BaseDBox" Grid.Row="4" Grid.Column="1" Header="Base depth (mm)" Minimum="0" Maximum="400" SmallChange="5"
+                                       SpinButtonPlacementMode="Compact" ValueChanged="Peg_Changed"
+                                       ToolTipService.ToolTip="Rectangular base depth, front to back. 0 sizes it from the model" />
+                            <ComboBox x:Name="BaseColorBox" Grid.Row="5" Header="Base color" HorizontalAlignment="Stretch" SelectionChanged="StandSetting_Changed"
+                                      ToolTipService.ToolTip="Painted 3MF (Paint colors on): the base and post filament" />
+                            <ComboBox x:Name="LogoColorBox" Grid.Row="5" Grid.Column="1" Header="Logo color" HorizontalAlignment="Stretch" SelectionChanged="StandSetting_Changed"
+                                      ToolTipService.ToolTip="Painted 3MF: the logo's filament" />
+                            <ComboBox x:Name="TextColorBox" Grid.Row="6" Header="Text color" HorizontalAlignment="Stretch" SelectionChanged="StandSetting_Changed"
+                                      ToolTipService.ToolTip="Painted 3MF: the plate's first line" />
+                            <ComboBox x:Name="Text2ColorBox" Grid.Row="6" Grid.Column="1" Header="Second line color" HorizontalAlignment="Stretch" SelectionChanged="StandSetting_Changed"
+                                      ToolTipService.ToolTip="Painted 3MF: the plate's second line" />
                         </Grid>
                         <ToggleSwitch x:Name="StandViewSwitch" Header="Show on stand" OnContent="On" OffContent="Off"
                                       Toggled="StandView_Toggled"

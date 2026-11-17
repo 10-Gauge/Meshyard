@@ -295,13 +295,30 @@ $("b-spawn-anim").onclick = () => loadModel("animated", true);
 // ---------- print export ----------
 const PRINT_FIELDS = { size_mm: "p-size", voxel_mm: "p-voxel", nozzle_mm: "p-nozzle", min_feature_nozzles: "p-minn",
   stand_height_mm: "p-standh", tilt_deg: "p-tilt", roll_deg: "p-roll", hollow_mm: "p-hollow",
-  stand_forward_mm: "p-standfwd", stand_side_mm: "p-standside" };
+  stand_forward_mm: "p-standfwd", stand_side_mm: "p-standside", stand_base_w_mm: "p-basew", stand_base_d_mm: "p-based" };
+// the stand's filament choices (painted 3MF): Bambu Lab PLA Basic colors
+const FILAMENTS = [["Jade White", "#FFFFFF"], ["Light Gray", "#D1D3D5"], ["Silver", "#A6A9AA"], ["Gray", "#8E9089"],
+  ["Dark Gray", "#545454"], ["Black", "#000000"], ["Blue Gray", "#5B6579"], ["Beige", "#F7E6DE"], ["Gold", "#E4BD68"],
+  ["Bronze", "#847D48"], ["Brown", "#9D432C"], ["Cocoa Brown", "#6F5034"], ["Red", "#C12E1F"], ["Maroon Red", "#9D2235"],
+  ["Magenta", "#EC008C"], ["Pink", "#F55A74"], ["Orange", "#FF6A13"], ["Pumpkin Orange", "#FF9016"], ["Yellow", "#F4EE2A"],
+  ["Sunflower Yellow", "#FEC600"], ["Bright Green", "#BECF00"], ["Bambu Green", "#00AE42"], ["Mistletoe Green", "#3F8E43"],
+  ["Turquoise", "#00B1B7"], ["Cyan", "#0086D6"], ["Cobalt Blue", "#0056B8"], ["Blue", "#0A2989"], ["Purple", "#5E43B7"],
+  ["Indigo Purple", "#482960"]];
+const STAND_COLORS = { stand_base_color: "p-colbase", stand_logo_color: "p-collogo", stand_text_color: "p-coltext",
+  stand_text2_color: "p-coltext2" };
+for (const id of Object.values(STAND_COLORS)) {
+  const sel = $(id);
+  sel.append(new Option(id === "p-colbase" ? "Filament 1" : "Same as base", ""));
+  for (const [name, hex] of FILAMENTS) sel.append(new Option(name, hex));
+}
 function applyPrintDefaults(p) {
   for (const [k, id] of Object.entries(PRINT_FIELDS)) if (p[k] != null) $(id).value = p[k];
   $("p-mode").value = p.mode || "solid";
   $("p-format").value = p.format || "3mf";
   $("p-colors").value = String(p.paint_colors || 0);
   $("p-stand").value = p.stand || "none";
+  $("p-posts").value = String(p.stand_posts || 1);
+  for (const [k, id] of Object.entries(STAND_COLORS)) $(id).value = p[k] || "";
   $("p-standshape").value = p.stand_shape || "round";
   $("p-thicken").checked = p.thicken !== false;
   updateMinMm();
@@ -315,17 +332,25 @@ function updateMinMm() {
   $("p-standside").disabled = noStand;
   $("p-standshape").disabled = noStand;
   for (const id of ["p-standtext", "p-standtext2", "p-logo"]) $(id).disabled = noStand || $("p-standshape").value !== "rect";
+  $("p-posts").disabled = noStand;
+  $("p-basew").disabled = noStand;
+  $("p-based").disabled = noStand || $("p-standshape").value !== "rect";
+  // the stand's colors go into a painted 3MF only
+  const painted = $("p-format").value === "3mf" && +$("p-colors").value > 0;
+  for (const id of Object.values(STAND_COLORS)) $(id).disabled = noStand || !painted;
 }
-for (const id of ["p-nozzle", "p-minn", "p-stand", "p-standshape"]) $(id).addEventListener("input", updateMinMm);
+for (const id of ["p-nozzle", "p-minn", "p-stand", "p-standshape", "p-format", "p-colors"]) $(id).addEventListener("input", updateMinMm);
 // settings that move the peg: show where it goes now
-for (const id of ["p-stand", "p-standfwd", "p-standside", "p-size", "p-tilt", "p-roll", "p-standh", "p-standshape", "p-standtext", "p-standtext2"])
+for (const id of ["p-stand", "p-standfwd", "p-standside", "p-size", "p-tilt", "p-roll", "p-standh", "p-standshape", "p-standtext", "p-standtext2",
+                  "p-posts", "p-basew", "p-based", "p-colbase", "p-collogo", "p-coltext", "p-coltext2"])
   $(id).addEventListener("input", () => refreshPeg(600));
 $("p-standview").addEventListener("change", () => viewer.setStandView($("p-standview").checked));
 
 function printOptions() {
   const o = { mode: $("p-mode").value, format: $("p-format").value, stand: $("p-stand").value, thicken: $("p-thicken").checked,
     stand_shape: $("p-standshape").value, stand_text: $("p-standtext").value.trim(),
-    stand_text2: $("p-standtext2").value.trim(), stand_scale: $("p-standscale").checked, stand_logo: $("p-logo").value,
+    stand_text2: $("p-standtext2").value.trim(), stand_scale: $("p-standscale").checked, stand_logo: $("p-logo").value, stand_posts: +$("p-posts").value,
+    ...Object.fromEntries(Object.entries(STAND_COLORS).map(([k, id]) => [k, $(id).value])),
     paint_colors: $("p-format").value === "3mf" ? +$("p-colors").value : 0 };
   for (const [k, id] of Object.entries(PRINT_FIELDS)) o[k] = +$(id).value;
   const overrides = {};
@@ -616,5 +641,8 @@ function standLine(r) {
   return "Seen from the stand's front (the light edge): nose to the right, " +
     (inc ? `nose ${inc > 0 ? "up" : "down"} ${deg(inc)}°` : "level") + ", " +
     (tilt ? `${tilt > 0 ? "right wing down (toward you)" : "left wing down (away from you)"} ${deg(tilt)}°` : "wings level") + ". " +
-    "The stand in the viewer is a simple stand-in: the exported stand adds the name plate, lettering, logo and beveled front.";
+    (r.stand_url ? "The stand shown is the one the export builds, at preview detail." : "The stand in the viewer is a simple stand-in: the exported stand adds the name plate, lettering, logo and beveled front.") +
+    (r.balance == null ? "" : r.balance < 0
+      ? ` Warning: the ship's balance point is ${Math.round(-r.balance)} mm outside the base, so it would tip over. Make the base bigger, add a second post or move the peg.`
+      : ` Balance point ${Math.round(r.balance)} mm inside the base edge.`);
 }

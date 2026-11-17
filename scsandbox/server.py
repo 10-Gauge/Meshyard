@@ -262,15 +262,29 @@ class App:
 
     def job_peg(self, channel: str, b: dict, opts: dict):
         """Where the stand peg will go for these print settings, on the model the viewer
-        shows (same coordinates), so it can be drawn before exporting."""
+        shows (same coordinates), so it can be drawn before exporting, with the stand
+        itself as the export builds it (plate, lettering, logo) to show on it."""
         inst = self.install(channel)
-        name, glb_for, _, _ = self._target(inst, b)
-        opts = {k: v for k, v in opts.items() if k != "stand_logo"}
-        po = printprep.PrintOptions.from_settings(self.settings, **opts)
+        name, glb_for, figure, maker = self._target(inst, b)
+        if figure:
+            opts = {**opts, "figure": True}
+        logo = str(opts.pop("stand_logo", "") or "")
+        if logo.lower() == "auto":
+            logo = maker
         variant = b.get("variant") if b.get("variant") in ("preview", "full") else "preview"
 
         def fn(log):
-            return printprep.peg_preview(Path(glb_for(variant, log)), po, log)
+            o = dict(opts)
+            if logo and opts.get("stand_shape") == "rect":
+                mask = logos.mask_for(inst, self.settings, logo)
+                if mask:
+                    o["stand_logo"] = str(mask)
+            po = printprep.PrintOptions.from_settings(self.settings, **o)
+            r = printprep.peg_preview(Path(glb_for(variant, log)), po, log)
+            if r.get("stand_glb"):
+                rel = Path(r.pop("stand_glb")).relative_to(models.models_dir(inst)).as_posix()
+                r["stand_url"] = f"/files/model/{inst.channel}/{inst.build_id}/{quote(rel)}"
+            return r
         return self.submit(f"Peg position: {name}", fn)
 
     def job_measure(self, channel: str, b: dict):
@@ -365,11 +379,19 @@ def _posed(inst, settings, asset, variant, gear_up, weapons, log, vtol=False, fl
         raise
 
 
+def _hex(v) -> str:
+    """'#rrggbb' from a color the page sent, or "" (unset)."""
+    h = re.sub(r"[^0-9A-Fa-f]", "", str(v or ""))[:6]
+    return "#" + h.upper() if len(h) == 6 else ""
+
+
 PRINT_OPTS = {"size_mm": float, "scale": float, "mode": str, "voxel_mm": float, "format": str, "nozzle_mm": float,
               "min_feature_nozzles": float, "thicken": bool, "hollow_mm": float, "tilt_deg": float, "roll_deg": float,
               "stand": str, "stand_height_mm": float, "part_overrides": dict,
               "stand_shape": str, "stand_text": lambda v: str(v)[:60], "stand_text2": lambda v: str(v)[:60],
               "stand_scale": bool, "stand_forward_mm": float, "stand_side_mm": float, "paint_colors": int,
+              "stand_posts": lambda v: 2 if int(v) >= 2 else 1, "stand_base_w_mm": float, "stand_base_d_mm": float,
+              "stand_base_color": _hex, "stand_logo_color": _hex, "stand_text_color": _hex, "stand_text2_color": _hex,
               "stand_logo": lambda v: re.sub(r"[^A-Za-z]", "", str(v))[:8]}  # manufacturer code or "auto"
 
 

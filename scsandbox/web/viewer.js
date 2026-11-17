@@ -196,27 +196,29 @@ export function createViewer(el, { onMessage } = {}) {
     if (!p || !p.top || !current) { redraw(); return; }
     if (standView && p.base && p.post_bottom) { drawStand(p); return; }
     peg = new THREE.Group();
-    const top = new THREE.Vector3(...p.top);
     const up = new THREE.Vector3(...(p.down || [0, -1, 0])).negate().normalize();
     const along = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
-    const socket = new THREE.Mesh(new THREE.CylinderGeometry(p.peg_r, p.peg_r, p.depth, 32),
-      new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.85, depthTest: false }));
-    socket.quaternion.copy(along);
-    socket.position.copy(top).addScaledVector(up, p.depth / 2);
-    socket.renderOrder = 10;
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(p.peg_r * 1.6, p.peg_r * 0.18, 12, 48),
-      new THREE.MeshBasicMaterial({ color: 0xff7a1a, depthTest: false }));
-    ring.quaternion.copy(along).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
-    ring.position.copy(top);
-    ring.renderOrder = 11;
-    peg.add(socket, ring);
-    if (p.stand === "peg" || p.stand === "attached") {
-      const h = Math.max(0, top.y - floorY);
-      if (h > 0) {
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(p.post_r, p.post_r, h, 32),
-          new THREE.MeshBasicMaterial({ color: 0x3aa0ff, transparent: true, opacity: 0.35, depthWrite: false }));
-        post.position.set(top.x, top.y - h / 2, top.z);
-        peg.add(post);
+    for (const t of (p.tops && p.tops.length ? p.tops : [p.top])) {
+      const top = new THREE.Vector3(...t);
+      const socket = new THREE.Mesh(new THREE.CylinderGeometry(p.peg_r, p.peg_r, p.depth, 32),
+        new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.85, depthTest: false }));
+      socket.quaternion.copy(along);
+      socket.position.copy(top).addScaledVector(up, p.depth / 2);
+      socket.renderOrder = 10;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(p.peg_r * 1.6, p.peg_r * 0.18, 12, 48),
+        new THREE.MeshBasicMaterial({ color: 0xff7a1a, depthTest: false }));
+      ring.quaternion.copy(along).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
+      ring.position.copy(top);
+      ring.renderOrder = 11;
+      peg.add(socket, ring);
+      if (p.stand === "peg" || p.stand === "attached") {
+        const h = Math.max(0, top.y - floorY);
+        if (h > 0) {
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(p.post_r, p.post_r, h, 32),
+            new THREE.MeshBasicMaterial({ color: 0x3aa0ff, transparent: true, opacity: 0.35, depthWrite: false }));
+          post.position.set(top.x, top.y - h / 2, top.z);
+          peg.add(post);
+        }
       }
     }
     current.add(peg);
@@ -232,13 +234,19 @@ export function createViewer(el, { onMessage } = {}) {
     const down = v(p.down).normalize(), up = down.clone().negate();
     const along = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
     const mat = new THREE.MeshStandardMaterial({ color: STAND_COLOR, roughness: 0.55, metalness: 0.1 });
-    const postH = top.distanceTo(bottom);
-    if (postH > 0) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(p.post_r, p.post_r, postH, 40), mat);
-      post.quaternion.copy(along);
-      post.position.copy(top).add(bottom).multiplyScalar(0.5);
-      peg.add(post);
-    }
+    const simple = new THREE.Group();   // stand-in until the real stand mesh arrives
+    peg.add(simple);
+    const tops = p.tops && p.tops.length ? p.tops : [p.top];
+    const bottoms = p.post_bottoms && p.post_bottoms.length ? p.post_bottoms : [p.post_bottom];
+    tops.forEach((t, i) => {
+      const tp = v(t), bt = v(bottoms[i] || p.post_bottom), postH = tp.distanceTo(bt);
+      if (postH > 0) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(p.post_r, p.post_r, postH, 40), mat);
+        post.quaternion.copy(along);
+        post.position.copy(tp).add(bt).multiplyScalar(0.5);
+        simple.add(post);
+      }
+    });
     let baseBottom;
     if (p.base.shape === "rect") {
       const c = p.base.corners.map(v);            // 4 bottom corners, then 4 top
@@ -247,7 +255,7 @@ export function createViewer(el, { onMessage } = {}) {
       const basis = new THREE.Matrix4().makeBasis(sx.clone().normalize(), sz.clone().normalize(), sy.clone().normalize().negate());
       box.quaternion.setFromRotationMatrix(basis);
       box.position.copy(c[0]).add(c[6]).multiplyScalar(0.5);
-      peg.add(box);
+      simple.add(box);
       baseBottom = c[0].clone().add(c[2]).multiplyScalar(0.5);
       // the front edge (where the name plate goes) in a lighter strip
       const fw = sx.length(), ft = sz.length(), strip = Math.max(sy.length() * 0.06, p.post_r * 0.5);
@@ -255,13 +263,13 @@ export function createViewer(el, { onMessage } = {}) {
         new THREE.MeshStandardMaterial({ color: FRONT_COLOR, roughness: 0.5 }));
       edge.quaternion.copy(box.quaternion);
       edge.position.copy(c[0]).add(c[5]).multiplyScalar(0.5).addScaledVector(sy.clone().normalize(), strip / 2 - strip * 0.01);
-      peg.add(edge);
+      simple.add(edge);
     } else {
       const b = v(p.base.bottom), t = v(p.base.top);
       const disc = new THREE.Mesh(new THREE.CylinderGeometry(p.base.r, p.base.r * 1.02, b.distanceTo(t), 64), mat);
       disc.quaternion.copy(along);
       disc.position.copy(b).add(t).multiplyScalar(0.5);
-      peg.add(disc);
+      simple.add(disc);
       baseBottom = b;
       // a tab on the front edge
       if (p.axes) {
@@ -271,7 +279,7 @@ export function createViewer(el, { onMessage } = {}) {
         tab.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
           up.clone().cross(front).normalize(), up, front));
         tab.position.copy(b).add(t).multiplyScalar(0.5).addScaledVector(front, p.base.r * 0.98);
-        peg.add(tab);
+        simple.add(tab);
       }
     }
     if (p.axes) {
@@ -290,6 +298,18 @@ export function createViewer(el, { onMessage } = {}) {
     }
     peg.traverse((o) => { if (o.isMesh && !o.material.map) { o.castShadow = true; o.receiveShadow = true; } });
     current.add(peg);
+    if (p.stand_url) {
+      // the stand as the export builds it: plate, lettering, logo and the picked colors
+      const mine = peg;
+      new GLTFLoader().load(p.stand_url, (gltf) => {
+        if (peg !== mine) return;   // the settings changed meanwhile
+        gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        simple.removeFromParent();
+        mine.add(gltf.scene);
+        renderer.shadowMap.needsUpdate = true;
+        redraw();
+      });
+    }
     // turn the ship onto the stand as printed and face the stand's front: the stand's
     // right (the nose side) to screen right, its up to screen up, its front toward you
     if (p.axes) {
