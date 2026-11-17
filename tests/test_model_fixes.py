@@ -52,3 +52,30 @@ def test_part_already_lined_up_is_left_alone():
     doc["nodes"][2].pop("rotation")
     doc["nodes"][4]["translation"] = [3.5, 0.0, 0.0]
     assert models.mount_port_parts(doc) == []
+
+
+def _interior_doc(faces):
+    # a hull mesh (faces triangles) used once by the ship and once inside an interior,
+    # plus a small exterior prop in the interior that has to stay
+    return {"nodes": [
+        {"name": "Ship", "children": [1, 2]},
+        {"name": "body", "mesh": 0},
+        {"name": "interior_ship_int_main", "children": [3, 4]},
+        {"mesh": 0, "translation": [0.0, 0.0, 6.0]},
+        {"mesh": 1},
+    ], "meshes": [
+        {"name": "Objects/Spaceships/Ships/X/Exterior/x.cga", "primitives": [{"indices": 0}]},
+        {"name": "objects/spaceships/ships/x/exterior/x_headlight.cga", "primitives": [{"indices": 1}]},
+    ], "accessors": [{"count": faces * 3}, {"count": 360}]}
+
+
+def test_hull_copies_leave_the_interior():
+    doc = _interior_doc(400_000)
+    assert models.drop_interior_hulls(doc) == 1
+    assert "mesh" not in doc["nodes"][3]          # the stray hull copy is gone
+    assert doc["nodes"][1]["mesh"] == 0           # the ship keeps its own hull
+    assert doc["nodes"][4]["mesh"] == 1           # small exterior props stay
+
+
+def test_small_exterior_models_stay():
+    assert models.drop_interior_hulls(_interior_doc(5_000)) == 0

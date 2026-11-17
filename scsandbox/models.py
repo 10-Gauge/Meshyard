@@ -58,6 +58,7 @@ def glb_for(install: Install, settings: dict, asset: dict, variant: str = "previ
                 if "fps_weapons" in (asset.get("subcategory") or ""):
                     complete_weapon(out, install, settings, asset, log)
                 place_interiors(out, install, asset, log)
+                fix_interior_hulls(out, log)
                 reattach_orphans(out, log)
                 fix_port_parts(out, log)
                 fix_tagged_geometry(out, install, settings, log)
@@ -78,6 +79,7 @@ def glb_for(install: Install, settings: dict, asset: dict, variant: str = "previ
                     complete_weapon(out, install, settings, asset, log)
                 if out.exists():
                     place_interiors(out, install, asset, log)
+                    fix_interior_hulls(out, log)
                     reattach_orphans(out, log)
                     fix_port_parts(out, log)
                     fix_tagged_geometry(out, install, settings, log)
@@ -394,6 +396,63 @@ def drop_empty_meshes(glb: Path, log=print) -> int:
         return 0
     if removed:
         log(f"removed {removed} empty mesh reference(s) that hid parts from prints")
+    return removed
+
+
+# an exterior model this big inside an interior is a whole hull, not a prop
+HULL_FACES = 20_000
+
+
+def drop_interior_hulls(doc: dict) -> int:
+    """Unhook whole ship hulls StarBreaker drops into an interior.
+
+    The Guardian MX's interior lists 22 pieces StarBreaker can't resolve, and each
+    comes out as the base Guardian's entire exterior ("Exterior/mrai_guardian.cga",
+    420,000 faces) at the piece's spot, so the ship showed five or so hulls stacked
+    inside each other. Interiors never carry an exterior model that big. Returns
+    references removed."""
+    nodes, meshes, acc = doc.get("nodes", []), doc.get("meshes", []), doc.get("accessors", [])
+
+    def faces(m):
+        return sum(acc[p["indices"]]["count"] // 3 for p in meshes[m].get("primitives", [])
+                   if "indices" in p and p["indices"] < len(acc))
+
+    removed = 0
+    for nd in nodes:
+        if not nd.get("name", "").lower().startswith("interior_"):
+            continue
+        todo, seen = list(nd.get("children", [])), set()
+        while todo:
+            k = todo.pop()
+            if k in seen or k >= len(nodes):
+                continue
+            seen.add(k)
+            todo += nodes[k].get("children", [])
+            m = nodes[k].get("mesh")
+            if m is None or m >= len(meshes):
+                continue
+            name = meshes[m].get("name", "").replace("\\", "/").lower()
+            if "/exterior/" in name and faces(m) > HULL_FACES:
+                del nodes[k]["mesh"]
+                removed += 1
+    return removed
+
+
+def fix_interior_hulls(glb: Path, log=print) -> int:
+    removed = 0
+
+    def edit(doc) -> bool:
+        nonlocal removed
+        removed = drop_interior_hulls(doc)
+        return removed > 0
+
+    try:
+        _edit_glb_json(glb, edit)
+    except OSError:
+        glb.with_name(glb.name + ".tmp").unlink(missing_ok=True)
+        return 0
+    if removed:
+        log(f"removed {removed} stray copies of the hull from the interior")
     return removed
 
 
