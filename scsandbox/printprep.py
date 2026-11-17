@@ -1069,6 +1069,7 @@ def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
     best, best_score = None, -1e18
     need = int(math.ceil((peg_depth + 1.0) / g.pitch))
     step = max(1, rad // 40)
+    side_w = 1.0 if opts.figure else 3.0
     for i in range(max(cx - rad, 0), min(cx + rad + 1, g.shape[0]), step):
         for j in range(max(cy - rad, 0), min(cy + rad + 1, g.shape[1]), step):
             if low[i, j] < 0:
@@ -1076,7 +1077,10 @@ def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
             col = g.v[i, j, low[i, j]:]
             gap = np.argmin(col) if not col.all() else len(col)
             run[i, j] = gap
-            d = math.hypot(i - cx, j - cy) * g.pitch
+            # sideways moves count triple: a fin under the middle pushes the peg in front of
+            # or behind it on the centerline before off to one side, where the fin hides the
+            # post from the stand's front (figures face the front: no preferred direction)
+            d = math.hypot(i - cx, (j - cy) * side_w) * g.pitch
             # prefer a broad part of the underside (a shallower socket in the belly beats a
             # deep one up a fin), then columns that fit the socket, then close to the center
             # of mass (as moved), then low
