@@ -79,3 +79,28 @@ def test_hull_copies_leave_the_interior():
 
 def test_small_exterior_models_stay():
     assert models.drop_interior_hulls(_interior_doc(5_000)) == 0
+
+
+def _cube_doc(offsets):
+    """A model of unit cubes, one node each, sharing one mesh."""
+    import struct
+    pts = [(x, y, z) for x in (0, 1) for y in (0, 1) for z in (0, 1)]
+    idx = [0, 1, 2, 1, 3, 2, 4, 5, 6, 5, 7, 6]
+    bin_ = struct.pack("<24f", *[c for p in pts for c in p]) + struct.pack("<12H", *idx)
+    doc = {"nodes": [{"name": f"part_{k}", "mesh": 0, "translation": list(o)} for k, o in enumerate(offsets)],
+           "meshes": [{"name": "cube", "primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+           "accessors": [{"bufferView": 0, "componentType": 5126, "count": 8, "type": "VEC3"},
+                         {"bufferView": 1, "componentType": 5123, "count": 12, "type": "SCALAR"}],
+           "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 96}, {"buffer": 0, "byteOffset": 96, "byteLength": 24}]}
+    return doc, bin_
+
+
+def test_small_groups_floating_free_are_found():
+    hull = [(k, 0, 0) for k in range(30)]               # 30 cubes in a row: the ship
+    doc, bin_ = _cube_doc(hull + [(10, 8, 0), (11, 8, 0)])  # a two-part group 7 m above it
+    assert sorted(models.detached_parts(doc, bin_)) == [30, 31]
+
+
+def test_a_ship_in_one_piece_loses_nothing():
+    doc, bin_ = _cube_doc([(k, 0, 0) for k in range(30)] + [(30.3, 0, 0)])  # last one close enough
+    assert models.detached_parts(doc, bin_) == []

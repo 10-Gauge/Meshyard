@@ -560,55 +560,74 @@ def part_boxes(doc: dict, bin_: bytes) -> list[tuple[int, object, object]]:
     return out
 
 
-# an interior piece this far from every other part floats in mid-air
-FLOAT_GAP_M = 0.75
+# parts this far apart (or 1% of the model's size, if more) don't touch
+FLOAT_GAP_M = 0.5
 
 
-def isolated_interior_parts(doc: dict, bin_: bytes) -> list[int]:
-    """Interior pieces that touch nothing: the Avenger's carries one 1.5 m above its
-    hull. Every other part's box is at least FLOAT_GAP_M away."""
+def _touching_groups(lo, hi, gap: float):
+    """Label boxes that touch (within gap), directly or through others."""
     import numpy as np
-    nodes = doc.get("nodes", [])
-    parent = {}
-    for i, nd in enumerate(nodes):
-        for c in nd.get("children", []):
-            parent.setdefault(c, i)
+    n = len(lo)
+    par = list(range(n))
 
-    def inside(i):
-        k, n = i, 0
-        while k is not None and n < 200:
-            if nodes[k].get("name", "").lower().startswith("interior_"):
-                return True
-            k, n = parent.get(k), n + 1
-        return False
+    def find(x):
+        while par[x] != x:
+            par[x] = par[par[x]]
+            x = par[x]
+        return x
+    a, b = lo - gap / 2, hi + gap / 2
+    active: list[int] = []
+    for i in np.argsort(a[:, 0]):
+        active = [j for j in active if b[j, 0] >= a[i, 0]]
+        if active:
+            act = np.array(active)
+            for j in act[np.all((a[act] <= b[i]) & (b[act] >= a[i]), axis=1)]:
+                ri, rj = find(int(i)), find(int(j))
+                if ri != rj:
+                    par[ri] = rj
+        active.append(int(i))
+    return np.array([find(i) for i in range(n)])
 
+
+def detached_parts(doc: dict, bin_: bytes) -> list[int]:
+    """Small groups of parts that touch nothing of the ship: an interior piece floating
+    above every Avenger, a Carrack panel 100 m off to the side, the Hyun's cooler 10 m
+    out, the 300 series' gear hinge, the Starlite's name plate. A group goes when it
+    holds under 5% of the parts and is under a fifth of the ship's size."""
+    import numpy as np
     boxes = part_boxes(doc, bin_)
     if len(boxes) < 20:
         return []
     lo = np.array([b[1] for b in boxes])
     hi = np.array([b[2] for b in boxes])
+    size = float(np.linalg.norm(hi.max(0) - lo.min(0)))
+    lab = _touching_groups(lo, hi, max(FLOAT_GAP_M, 0.01 * size))
+    ids, counts = np.unique(lab, return_counts=True)
+    main = ids[np.argmax(counts)]
+    mm = lab == main
+    main_size = float(np.linalg.norm(hi[mm].max(0) - lo[mm].min(0)))
     out = []
-    for k, (i, a, b) in enumerate(boxes):
-        if not inside(i):
+    for g, c in zip(ids, counts):
+        if g == main:
             continue
-        gap = np.maximum(0, np.maximum(lo - b, a - hi)).max(axis=1)
-        gap[k] = np.inf
-        if gap.min() > FLOAT_GAP_M:
-            out.append(i)
+        mem = np.where(lab == g)[0]
+        extent = float(np.linalg.norm(hi[mem].max(0) - lo[mem].min(0)))
+        if c < max(5, 0.05 * len(boxes)) and extent < 0.2 * main_size:
+            out += [boxes[k][0] for k in mem]
     return out
 
 
 def fix_floating_parts(glb: Path, log=print) -> int:
-    """Drop floating interior pieces, once per model file (it reads the whole model)."""
+    """Drop parts floating free of the ship, once per model file (it reads the whole model)."""
     mark = glb.with_name(glb.name + ".floating")
     try:
-        if mark.exists() and mark.read_text().strip() == str(glb.stat().st_mtime_ns):
+        if mark.exists() and mark.read_text().strip() == f"2:{glb.stat().st_mtime_ns}":
             return 0
     except OSError:
         pass
     try:
         doc, bin_, _ = _read_glb(glb)
-        drop = set(isolated_interior_parts(doc, bin_))
+        drop = set(detached_parts(doc, bin_))
     except (OSError, ValueError, KeyError, IndexError) as e:
         log(f"couldn't check {glb.name} for floating parts: {e}")
         return 0
@@ -622,9 +641,9 @@ def fix_floating_parts(glb: Path, log=print) -> int:
         except OSError:
             glb.with_name(glb.name + ".tmp").unlink(missing_ok=True)
             return 0
-        log(f"removed {len(drop)} interior piece(s) floating outside the hull")
+        log(f"removed {len(drop)} part(s) floating free of the ship")
     try:
-        mark.write_text(str(glb.stat().st_mtime_ns))
+        mark.write_text(f"2:{glb.stat().st_mtime_ns}")
     except OSError:
         pass
     return len(drop)
@@ -636,7 +655,7 @@ def fix_interior_hulls(glb: Path, log=print) -> int:
     def edit(doc) -> bool:
         nonlocal removed
         hulls = drop_interior_hulls(doc)
-        strays = drop_stray_interior_parts(doc)
+        strays = 0  # far-off pieces go with the floating ones (fix_floating_parts)
         removed = hulls + strays
         if strays:
             log(f"removed {strays} interior piece(s) placed far outside the ship")

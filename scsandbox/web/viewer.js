@@ -369,7 +369,7 @@ function tightBox(root) {
 function strayLimit(dist) {
   if (dist.length < 20) return Infinity;
   const d = dist.slice().sort((a, b) => a - b);
-  const gap = Math.max(2, 0.25 * d[Math.floor(d.length * 0.9)]);
+  const gap = Math.max(5, 0.6 * d[Math.floor(d.length * 0.9)]);
   for (let i = Math.floor(d.length * 0.9); i < d.length; i++)
     if (d[i] - d[i - 1] > gap) return d[i - 1] + 1e-6;
   return Infinity;
