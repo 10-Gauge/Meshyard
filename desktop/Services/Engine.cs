@@ -2,14 +2,14 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 
-namespace SCAssetBrowser.Services;
+namespace Meshyard.Services;
 
 /// <summary>
 /// Runs the Python engine (game indexing, model export, print conversion) as a hidden
 /// child process and finds the localhost address it serves its API on.
 ///
 /// Release builds carry the packaged engine inside the exe and unpack it once per build
-/// to %LOCALAPPDATA%\sc-sandbox\engine. Development builds run the repo's .venv instead,
+/// to %LOCALAPPDATA%\Meshyard\engine. Development builds run the repo's .venv instead,
 /// or the exe named by SC_ENGINE.
 ///
 /// The engine exits when its stdin closes, so it never outlives the app, even if the
@@ -91,13 +91,13 @@ public sealed class Engine : IDisposable
             return new ProcessStartInfo(custom);
 
         var asm = Assembly.GetExecutingAssembly();
-        using (var res = asm.GetManifestResourceStream("sc-engine.exe"))
+        using (var res = asm.GetManifestResourceStream("meshyard-engine.exe"))
         {
             if (res != null)
             {
                 // one folder per build of the app, so an update never runs a stale engine
                 var dir = Path.Combine(Paths.Home, "engine", asm.ManifestModule.ModuleVersionId.ToString("N")[..12]);
-                var exe = Path.Combine(dir, "sc-engine.exe");
+                var exe = Path.Combine(dir, "meshyard-engine.exe");
                 if (!File.Exists(exe) || new FileInfo(exe).Length != res.Length)
                 {
                     Directory.CreateDirectory(dir);

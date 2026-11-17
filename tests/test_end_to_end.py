@@ -13,8 +13,8 @@ FIXTURES = Path(__file__).parent / "fixtures"
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     home = tmp_path / "home"
-    monkeypatch.setenv("SCSANDBOX_HOME", str(home))
-    root = tmp_path / "StarCitizen"
+    monkeypatch.setenv("MESHYARD_HOME", str(home))
+    root = tmp_path / "SomeGame"
     for ch, ver, change in (("LIVE", "4.3.1-live.10234567", "10234567"), ("PTU", "4.4.0-ptu.10300001", "10300001")):
         d = root / ch
         d.mkdir(parents=True)
@@ -91,7 +91,7 @@ def test_server_print_flow(env):
             time.sleep(0.2)
         raise AssertionError("job timed out")
 
-    assert b"SC Asset Browser" in get("/")
+    assert b"Meshyard" in get("/")
     info = get("/api/installs")
     assert [i["indexed"] for i in info["installs"]] == [True, False]
     hits = get("/api/assets?channel=LIVE&q=gladius&kind=entity")
@@ -164,7 +164,7 @@ def test_desktop_add_game_folder(env, tmp_path):
         empty = tmp_path / "empty"
         empty.mkdir()
         assert post("/api/roots", {"path": str(empty)})[0] == 404  # no LIVE/PTU in here
-        code, r = post("/api/roots", {"path": str(tmp_path)})  # the folder above StarCitizen works too
+        code, r = post("/api/roots", {"path": str(tmp_path)})  # the folder above SomeGame works too
         assert code == 200 and r["root"] == str(env["root"])
         assert r["root"] in config.load()["install_roots"]
         for _ in range(100):  # adding the folder kicks off indexing

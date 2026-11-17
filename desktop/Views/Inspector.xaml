@@ -1,5 +1,5 @@
 <UserControl
-    x:Class="SCAssetBrowser.Views.Inspector"
+    x:Class="Meshyard.Views.Inspector"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
@@ -66,7 +66,7 @@
                           ToolTipService.ToolTip="The ship's paints (liveries) from the game: the viewer and exports use the one picked here" />
 
                 <Grid x:Name="GearRow" ColumnSpacing="12" Margin="2,0,0,0"
-                      ToolTipService.ToolTip="Show and print the ship with its landing gear retracted and the gear doors closed. Ships that change shape on the ground (Eclipse, Stingray, Mole, Clipper and more) show them folded with the gear down once the gear has been raised once.">
+                      ToolTipService.ToolTip="Show and print the ship with its landing gear retracted and the gear doors closed. Ships that change shape on the ground show it, with wings folded or engines moved, with the gear down once the gear has been raised once.">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />

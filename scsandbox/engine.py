@@ -71,8 +71,8 @@ def main() -> None:
         raise SystemExit(self_test())
     from . import server, tools
     tools.release_bundle_dll_path()  # so Blender and the game tools load their own DLLs
-    # SCSANDBOX_NO_AUTO=1: don't download tools or start indexing on launch (tests)
-    auto = os.environ.get("SCSANDBOX_NO_AUTO") != "1"
+    # MESHYARD_NO_AUTO=1: don't download tools or start indexing on launch (tests)
+    auto = os.environ.get("MESHYARD_NO_AUTO") != "1"
     httpd, _app, url = server.start(config.load(), port=0, auto=auto)
     print(f"READY {url}", flush=True)
 

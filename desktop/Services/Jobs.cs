@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using System.Text.Json.Nodes;
 using Microsoft.UI.Xaml.Controls;
 
-namespace SCAssetBrowser.Services;
+namespace Meshyard.Services;
 
 public sealed class JobFailedException(string message) : Exception(message);
 

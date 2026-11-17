@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stand-in for StarBreaker used by the tests. Mimics the CLI shapes sc-sandbox calls."""
+"""Stand-in for StarBreaker used by the tests. Mimics the CLI shapes meshyard calls."""
 import json, os, sys
 from pathlib import Path
 

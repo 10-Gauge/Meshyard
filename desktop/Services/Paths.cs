@@ -2,23 +2,50 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace SCAssetBrowser.Services;
+namespace Meshyard.Services;
 
 /// <summary>The toolkit's data folder (shared with the engine) and small helpers around it.</summary>
 public static class Paths
 {
-    /// <summary>%LOCALAPPDATA%\sc-sandbox, or SCSANDBOX_HOME when set (same rule as the engine).</summary>
+    /// <summary>%LOCALAPPDATA%\Meshyard, or MESHYARD_HOME when set (same rule as the engine).</summary>
     public static string Home { get; } = ResolveHome();
 
     public static string Exports => Path.Combine(Home, "exports");
 
     static string ResolveHome()
     {
-        var env = Environment.GetEnvironmentVariable("SCSANDBOX_HOME");
-        var home = !string.IsNullOrWhiteSpace(env)
-            ? env
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "sc-sandbox");
+        var env = Environment.GetEnvironmentVariable("MESHYARD_HOME");
+        if (string.IsNullOrWhiteSpace(env)) env = Environment.GetEnvironmentVariable("SCSANDBOX_HOME");
+        var home = !string.IsNullOrWhiteSpace(env) ? env : Migrate();
         Directory.CreateDirectory(home);
+        // the engine (a child process) reads the same variable, so both always agree
+        Environment.SetEnvironmentVariable("MESHYARD_HOME", home);
+        return home;
+    }
+
+    /// <summary>The data folder used to be %LOCALAPPDATA%\sc-sandbox. Move it to
+    /// %LOCALAPPDATA%\Meshyard the first time, and fix the paths saved in its settings.
+    /// If something in it is still open (an update finishing, say), keep using the old
+    /// folder this time and try again on the next start.</summary>
+    static string Migrate()
+    {
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var home = Path.Combine(local, "Meshyard");
+        var old = Path.Combine(local, "sc-sandbox");
+        if (Directory.Exists(home) || !Directory.Exists(old)) return home;
+        try { Directory.Move(old, home); }
+        catch { return old; }
+        foreach (var name in new[] { "settings.json", "desktop.json" })
+        {
+            var f = Path.Combine(home, name);
+            try
+            {
+                var text = File.ReadAllText(f);
+                var fixedText = text.Replace(old, home).Replace(old.Replace("\\", "\\\\"), home.Replace("\\", "\\\\"));
+                if (fixedText != text) File.WriteAllText(f, fixedText);
+            }
+            catch { }
+        }
         return home;
     }
 

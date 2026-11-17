@@ -1,14 +1,14 @@
 bl_info = {
-    "name": "SC Sandbox",
-    "author": "sc-sandbox",
+    "name": "Meshyard",
+    "author": "Meshyard",
     "version": (0, 1, 0),
     "blender": (3, 6, 0),
-    "location": "3D Viewport > Sidebar > SC Sandbox",
-    "description": "Spawn Star Citizen assets from your local install into a sandbox scene, and prep them for 3D printing",
+    "location": "3D Viewport > Sidebar > Meshyard",
+    "description": "Spawn game assets from your own game data into a sandbox scene, and prep them for 3D printing",
     "category": "Import-Export",
 }
 
-# Talks to the local asset browser (`sc-sandbox serve`), which does the
+# Talks to the local asset browser (`meshyard serve`), which does the
 # extraction. Nothing here touches the network beyond 127.0.0.1.
 
 import json
@@ -150,7 +150,7 @@ def spawn_path(path, label):
     if not path.lower().endswith("scene.json"):
         return import_glb(path, label)
     if not starbreaker_ready():
-        raise RuntimeError("Animated spawns need the StarBreaker add-on: run  sc-sandbox blender install")
+        raise RuntimeError("Animated spawns need the StarBreaker add-on: run  meshyard blender install")
     blend = os.path.join(os.path.dirname(path), "scene.blend")
     if os.path.isfile(blend):
         return append_package_scene(blend, label)
@@ -168,7 +168,7 @@ def wait_for_job(job_id, label, on_done):
         try:
             j = call(f"/api/jobs/{job_id}")
         except Exception as e:
-            print("SC Sandbox:", e)
+            print("Meshyard:", e)
             return 2.0
         st = bpy.context.window_manager.sc_sandbox
         if j["state"] == "running":
@@ -232,8 +232,8 @@ def run_search(st):
     try:
         d = call("/api/assets?" + urllib.parse.urlencode(params))
     except Exception as e:
-        st.status = "Asset browser not running: start it with  sc-sandbox serve"
-        return f"Asset browser not reachable at {prefs().server} ({e}). Run: sc-sandbox serve"
+        st.status = "Asset browser not running: start it with  meshyard serve"
+        return f"Asset browser not reachable at {prefs().server} ({e}). Run: meshyard serve"
     st.results.clear()
     for a in d["items"]:
         r = st.results.add()
@@ -395,7 +395,7 @@ class SC_OT_spawn(bpy.types.Operator):
         r = st.results[st.index]
         try:
             if self.animated and not starbreaker_ready():
-                raise RuntimeError("Animated spawns need the StarBreaker add-on: run  sc-sandbox blender install")
+                raise RuntimeError("Animated spawns need the StarBreaker add-on: run  meshyard blender install")
             variant = "animated" if self.animated else "full"
             job = call("/api/model", {"channel": st.channel, "id": r.asset_id, "variant": variant})["job"]
         except Exception as e:
@@ -433,7 +433,7 @@ def package_clips(root):
             _clip_cache[path] = [c for c in sb_ui.available_package_animation_items(PackageBundle.load(path))
                                  if c[0] not in ("*",) and not c[0].startswith("anim_")]
         except Exception as e:
-            print("SC Sandbox: could not read clips:", e)
+            print("Meshyard: could not read clips:", e)
             _clip_cache[path] = []
     return _clip_cache[path]
 
@@ -539,10 +539,10 @@ class SC_OT_make_printable(bpy.types.Operator):
 
 
 class SC_PT_panel(bpy.types.Panel):
-    bl_label = "SC Sandbox"
+    bl_label = "Meshyard"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "SC Sandbox"
+    bl_category = "Meshyard"
 
     def draw(self, context):
         st = context.window_manager.sc_sandbox

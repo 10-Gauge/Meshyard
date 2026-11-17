@@ -2,13 +2,13 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 
-namespace SCAssetBrowser.Services;
+namespace Meshyard.Services;
 
 /// <summary>
 /// The tools the engine runs (StarBreaker, its Blender add-on, cgf-converter and, in a
 /// -WithBlender build, a portable Blender) travel inside the exe: packaging\build_exe.ps1 appends a zip of
 /// them after the app, followed by its length and the marker "SCTOOLS1". On start each
-/// tool is unpacked once to %LOCALAPPDATA%\sc-sandbox\tools\&lt;tool&gt; (where the engine
+/// tool is unpacked once to %LOCALAPPDATA%\Meshyard\tools\&lt;tool&gt; (where the engine
 /// looks first), and again only when a new app build carries a different version.
 ///
 /// A tool the user has since updated with "Download tools" (its folder has no BUNDLED

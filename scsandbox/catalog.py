@@ -1,6 +1,6 @@
 """Per-build asset index.
 
-`sc-sandbox update` builds one index per (channel, build). It asks StarBreaker
+`meshyard update` builds one index per (channel, build). It asks StarBreaker
 for the entity records (ships, vehicles, items, props, characters) and the
 English localization, then flattens them into SQLite so the browser can search
 instantly. A new game build gets its own folder, so LIVE and PTU never mix and
@@ -299,7 +299,7 @@ def prune(channel: str, keep_n: int, keep: str = "", log=print) -> None:
 def connect(install: Install) -> sqlite3.Connection:
     db = db_path(install)
     if not db.exists():
-        raise FileNotFoundError(f"{install.channel} is not indexed yet. Run: sc-sandbox update --channel {install.channel}")
+        raise FileNotFoundError(f"{install.channel} is not indexed yet. Run: meshyard update --channel {install.channel}")
     con = sqlite3.connect(db, check_same_thread=False)
     con.row_factory = sqlite3.Row
     return con

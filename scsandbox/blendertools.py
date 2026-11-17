@@ -25,7 +25,7 @@ _OPEN_EXPR = (
     "import bpy\n"
     "def _go():\n"
     "    try: bpy.ops.sc_sandbox.build_scene()\n"
-    "    except Exception as e: print('SC Sandbox:', e)\n"
+    "    except Exception as e: print('Meshyard:', e)\n"
     "bpy.app.timers.register(_go, first_interval=1.0)"
 )
 

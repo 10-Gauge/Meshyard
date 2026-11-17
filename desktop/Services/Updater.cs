@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 
-namespace SCAssetBrowser.Services;
+namespace Meshyard.Services;
 
 /// <summary>
 /// Looks for a newer release on GitHub each time the app opens, and installs it on request.
@@ -16,9 +16,14 @@ namespace SCAssetBrowser.Services;
 /// </summary>
 public static class Updater
 {
-    public const string Repo = "10-Gauge/SC-Asset-Browser";
+    public const string Repo = "10-Gauge/Meshyard";
     public const string ReleasesPage = "https://github.com/" + Repo + "/releases/latest";
-    const string AssetName = "SC-Asset-Browser.exe";
+    // The repo's earlier name. GitHub redirects it once the repo is renamed, and it's
+    // tried when the new name isn't found yet.
+    const string OldRepo = "10-Gauge/SC-Asset-Browser";
+    // Releases carry the exe under its current name and under the name builds before
+    // 1.7.0 look for, so older installs can still update.
+    static readonly string[] AssetNames = { "Meshyard.exe", "SC-Asset-Browser.exe" };
 
     public sealed record Release(Version Version, string Url, long Size, string? Sha256, string PageUrl);
 
@@ -29,7 +34,7 @@ public static class Updater
     static HttpClient CreateClient()
     {
         var h = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
-        h.DefaultRequestHeaders.UserAgent.ParseAdd($"SC-Asset-Browser/{Current.ToString(3)}");
+        h.DefaultRequestHeaders.UserAgent.ParseAdd($"Meshyard/{Current.ToString(3)}");
         return h;
     }
 
@@ -46,7 +51,7 @@ public static class Updater
     public static bool CanSelfUpdate =>
         ExePath != null
         && !Path.GetFileNameWithoutExtension(ExePath).Equals("dotnet", StringComparison.OrdinalIgnoreCase)
-        && Assembly.GetExecutingAssembly().GetManifestResourceInfo("sc-engine.exe") != null;
+        && Assembly.GetExecutingAssembly().GetManifestResourceInfo("meshyard-engine.exe") != null;
 
     static string DownloadPath => ExePath + ".download";
 
@@ -54,22 +59,30 @@ public static class Updater
     public static async Task<Release?> CheckAsync()
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Repo}/releases/latest");
-        req.Headers.Accept.ParseAdd("application/vnd.github+json");
-        using var resp = await Http.SendAsync(req, cts.Token);
-        if (!resp.IsSuccessStatusCode) return null;
-        var json = JsonNode.Parse(await resp.Content.ReadAsStringAsync(cts.Token));
-        var tag = (string?)json?["tag_name"] ?? "";
+        var json = await LatestReleaseAsync(Repo, cts.Token) ?? await LatestReleaseAsync(OldRepo, cts.Token);
+        if (json == null) return null;
+        var tag = (string?)json["tag_name"] ?? "";
         if (!Version.TryParse(tag.TrimStart('v', 'V'), out var v)) return null;
         v = new Version(v.Major, v.Minor, Math.Max(v.Build, 0));
         if (v <= Current) return null;
-        var asset = json?["assets"]?.AsArray()
-            .FirstOrDefault(a => string.Equals((string?)a?["name"], AssetName, StringComparison.OrdinalIgnoreCase));
+        var assets = json["assets"]?.AsArray();
+        var asset = AssetNames
+            .Select(n => assets?.FirstOrDefault(a => string.Equals((string?)a?["name"], n, StringComparison.OrdinalIgnoreCase)))
+            .FirstOrDefault(a => a != null);
         if (asset == null) return null;
         var digest = (string?)asset["digest"];
         var sha = digest != null && digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ? digest[7..] : null;
         return new Release(v, (string)asset["browser_download_url"]!, (long)asset["size"]!, sha,
                            (string?)json!["html_url"] ?? ReleasesPage);
+    }
+
+    static async Task<JsonNode?> LatestReleaseAsync(string repo, CancellationToken ct)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repo}/releases/latest");
+        req.Headers.Accept.ParseAdd("application/vnd.github+json");
+        using var resp = await Http.SendAsync(req, ct);
+        if (!resp.IsSuccessStatusCode) return null;
+        return JsonNode.Parse(await resp.Content.ReadAsStringAsync(ct));
     }
 
     /// <summary>Download the release next to the running exe and check it. Progress goes from 0 to 1.

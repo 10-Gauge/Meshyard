@@ -102,9 +102,9 @@ def find(tool: str, settings: dict) -> Path:
         if hits:
             return hits[0]
     if tool in REPOS:
-        hint = 'click "Download tools" in the app (or run: sc-sandbox tools update)'
+        hint = 'click "Download tools" in the app (or run: meshyard tools update)'
     else:
-        hint = f"install it, or run: sc-sandbox config set tools.{tool} <path>"
+        hint = f"install it, or run: meshyard config set tools.{tool} <path>"
     raise ToolError(f"{tool} not found: {hint}")
 
 
@@ -120,7 +120,9 @@ def run(settings: dict, command: str, install=None, tool: str = "starbreaker",
     env = child_env()
     if install is not None:
         env["SC_DATA_P4K"] = str(install.p4k)
-        env["SC_EXE"] = str(install.path / "Bin64" / "StarCitizen.exe")
+        exes = sorted((install.path / "Bin64").glob("*.exe")) if (install.path / "Bin64").is_dir() else []
+        if exes:
+            env["SC_EXE"] = str(max(exes, key=lambda f: f.stat().st_size))  # the game's own exe
     proc = subprocess.run(argv, cwd=cwd, env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL,
                           encoding="utf-8", errors="replace", timeout=timeout, creationflags=NO_WINDOW)
     if proc.returncode != 0:
@@ -133,7 +135,7 @@ def run(settings: dict, command: str, install=None, tool: str = "starbreaker",
 
 def _gh_json(url: str):
     req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json",
-                                               "User-Agent": "sc-sandbox"})
+                                               "User-Agent": "meshyard"})
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.load(r)
 
@@ -193,12 +195,12 @@ def update_starbreaker_addon(force: bool = False) -> str:
     the installed CLI, so its package format matches what the CLI exports."""
     tag = installed_version("starbreaker")
     if not tag:
-        raise ToolError("Install StarBreaker first (sc-sandbox tools update)")
+        raise ToolError("Install StarBreaker first (meshyard tools update)")
     dest = tools_dir() / "starbreaker_addon"
     if not force and (dest / "VERSION").exists() and (dest / "VERSION").read_text().strip() == tag:
         return f"StarBreaker Blender add-on {tag} is already current"
     url = f"https://codeload.github.com/{REPOS['starbreaker']}/zip/refs/tags/{tag}"
-    req = urllib.request.Request(url, headers={"User-Agent": "sc-sandbox"})
+    req = urllib.request.Request(url, headers={"User-Agent": "meshyard"})
     with urllib.request.urlopen(req, timeout=600) as r:
         data = r.read()
     staging = tools_dir() / ".starbreaker_addon.new"
@@ -233,12 +235,12 @@ def update_tool(tool: str, force: bool = False) -> str:
     asset = choose_asset(rel.get("assets", []))
     if not asset:
         raise ToolError(f"No Windows download found in {REPOS[tool]} release {tag}. "
-                        f"Download it manually and run: sc-sandbox config set tools.{tool} <path to exe>")
+                        f"Download it manually and run: meshyard config set tools.{tool} <path to exe>")
     dest = tools_dir() / tool
     staging = tools_dir() / f".{tool}.new"
     shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir()
-    req = urllib.request.Request(asset["browser_download_url"], headers={"User-Agent": "sc-sandbox"})
+    req = urllib.request.Request(asset["browser_download_url"], headers={"User-Agent": "meshyard"})
     with urllib.request.urlopen(req, timeout=600) as r:
         data = r.read()
     if asset["name"].lower().endswith(".zip"):
