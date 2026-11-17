@@ -25,9 +25,9 @@ def test_scale_goes_on_the_plate(tmp_path, monkeypatch):
     seen = {}
     real = printprep._plan_rect
 
-    def spy(s, w, d, text, text2="", logo=""):
+    def spy(s, w, d, text, text2="", logo="", *rest):
         seen["text2"] = text2
-        return real(s, w, d, text, text2, logo)
+        return real(s, w, d, text, text2, logo, *rest)
 
     monkeypatch.setattr(printprep, "_plan_rect", spy)
     for line2, want in (("", "1:100"), ("Red Five", "Red Five   1:100")):
