@@ -76,7 +76,7 @@
                 <StackPanel Spacing="6">
                     <TextBlock x:Name="AboutTitle" Style="{StaticResource BodyStrongTextBlockStyle}" />
                     <TextBlock Style="{StaticResource Secondary}"
-                               Text="Runs offline against your own copy of a game. It never talks to any game servers and never touches the game client or its anti-cheat. Game content belongs to whoever made the game: keep what you extract for personal use and don't redistribute it. Meshyard isn't made by, endorsed by or connected to any game developer or publisher." />
+                               Text="Runs offline against your own copy of a game. It never talks to any game servers and never touches the game client or its anti-cheat. Game content belongs to whoever made the game: everything you view, print or export is for personal use only, so don't share, upload or sell exported files or prints made from them. Meshyard isn't made by, endorsed by or connected to any game developer or publisher." />
                 </StackPanel>
             </Border>
         </StackPanel>

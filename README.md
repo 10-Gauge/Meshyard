@@ -6,7 +6,11 @@ Meshyard reads the packed data files that CryEngine games ship with (`.p4k` arch
 
 ![The Browse page: search results on the left, the 3D view in the middle, and the paint, landing gear, weapons, VTOL, flight mode and 3D print options on the right](docs/images/app-browse.png)
 
-It runs on your own PC against your own copy of the game. It only ever reads the game's data file. It doesn't talk to any game servers, and it never touches the game client or its anti-cheat. Anything you pull out of a game belongs to whoever made that game, so keep it for your own use and don't share the files around.
+It runs on your own PC against your own copy of the game. It only ever reads the game's data file. It doesn't talk to any game servers, and it never touches the game client or its anti-cheat.
+
+## Personal use only
+
+The models, textures, names and logos inside a game belong to the company that made it. Everything you view, print or export with Meshyard is for your own personal use. Don't share, upload or sell the files you export, or prints made from them, online or anywhere else. The app asks you to agree to this the first time you open it.
 
 ## Supported games
 

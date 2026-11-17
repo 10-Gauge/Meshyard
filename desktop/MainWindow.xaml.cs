@@ -97,6 +97,7 @@ public sealed partial class MainWindow : Window
             Splash.Visibility = Visibility.Collapsed;
             Nav.IsEnabled = true;
             Nav.SelectedItem = NavBrowse;
+            if (!await ConfirmPersonalUseAsync()) { Close(); return; }
             _ = CheckBlenderAsync(blenderUnpack);
         }
         catch (Exception e)
@@ -533,6 +534,32 @@ public sealed partial class MainWindow : Window
             await UseGameDataAsync(chosen);
         else if (result == ContentDialogResult.Secondary)
             await ChooseDataFileAsync();
+    }
+
+    /// <summary>Shown once: everything made in the app is for personal use only.</summary>
+    async Task<bool> ConfirmPersonalUseAsync()
+    {
+        if (Prefs.Get("personal_use_ok") == "1") return true;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = "For personal use only",
+            Content = new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 460,
+                Text = "Meshyard reads the files of a game you own. The models, textures, names and logos in them " +
+                       "belong to the company that made the game.\n\n" +
+                       "Everything you view, print or export with Meshyard is for your own personal use. " +
+                       "Don't share, upload or sell the files you export, or prints made from them, online or anywhere else.",
+            },
+            PrimaryButtonText = "I understand",
+            CloseButtonText = "Quit",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return false;
+        Prefs.Set("personal_use_ok", "1");
+        return true;
     }
 
     void ResetView_Click(object sender, RoutedEventArgs e) => _ = _state?.Viewer.ResetView();

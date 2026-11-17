@@ -248,6 +248,8 @@
                                 <TextBlock Text="Export printable file" />
                             </StackPanel>
                         </Button>
+                        <TextBlock Style="{StaticResource Secondary}" TextWrapping="Wrap"
+                                   Text="For personal use only. Don't share, upload or sell exported files, or prints made from them." />
                         <StackPanel x:Name="PrintBusy" Spacing="6" Visibility="Collapsed">
                             <ProgressBar IsIndeterminate="True" />
                             <TextBlock x:Name="PrintBusyText" Style="{StaticResource Secondary}" />
@@ -278,6 +280,8 @@
                                 <TextBlock Text="Export model" />
                             </StackPanel>
                         </Button>
+                        <TextBlock Style="{StaticResource Secondary}" TextWrapping="Wrap"
+                                   Text="For personal use only. Don't share, upload or sell exported files, or prints made from them." />
                         <ProgressBar x:Name="ExportBusy" IsIndeterminate="True" Visibility="Collapsed" />
                         <InfoBar x:Name="ExportResult" IsClosable="True" />
                     </StackPanel>
