@@ -108,6 +108,8 @@ class PrintOptions:
     stand_text2: str = ""           # optional second, smaller line under it
     stand_scale: bool = False       # add the print scale (1:85) to the plate's second line
     stand_logo: str = ""            # PNG mask of a logo embossed beside the text
+    stand_forward_mm: float = 0.0   # move the stand peg toward the nose (+) or tail (-)
+    stand_side_mm: float = 0.0      # move the stand peg to the right (+) or left (-)
     figure: bool = False            # character figure: the stand goes under its feet
 
     @classmethod
@@ -666,8 +668,9 @@ class StandSpec:
 
 
 def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
-    """Pick where the post meets the model: under the center of mass, where the
-    model is thick enough to take the peg socket."""
+    """Pick where the post meets the model: under the center of mass (moved by the
+    stand_forward_mm / stand_side_mm offsets), where the model is thick enough to take the
+    peg socket and the underside is broad, not the edge of a thin fin or antenna."""
     from scipy import ndimage
     size = opts.size_mm
     post_r = float(np.clip(size * 0.03, 3.0, 8.0))
@@ -683,7 +686,22 @@ def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
         raise ValueError("Nothing to put on a stand")
     # Evaluate a window of columns around the center of mass (cheap and stable).
     rad = int(math.ceil(max(g.shape[:2]) * 0.25))
-    cx, cy = int(com[0]), int(com[1])
+    # model axes after posing: +y is the nose, +x the right side
+    cx = int(np.clip(com[0] + opts.stand_side_mm / g.pitch, 0, g.shape[0] - 1))
+    cy = int(np.clip(com[1] + opts.stand_forward_mm / g.pitch, 0, g.shape[1] - 1))
+    # how far the underside rises within the post's footprint: small on a broad belly,
+    # large under a thin fin or keel (the post would only touch its edge)
+    rp = max(1, int(round(post_r / g.pitch)))
+    yy, xx = np.ogrid[-rp:rp + 1, -rp:rp + 1]
+    foot = xx * xx + yy * yy <= rp * rp
+    lowf = np.where(any_z, low, g.shape[2]).astype(np.int32)
+    rise = ndimage.maximum_filter(lowf, footprint=foot, mode="constant", cval=g.shape[2]) - lowf
+    # and whether anything hangs lower inside the post's path (a fin beside a flat belly:
+    # the post drops straight down through it)
+    rc = rp + max(1, int(round(1.0 / g.pitch)))
+    yy, xx = np.ogrid[-rc:rc + 1, -rc:rc + 1]
+    path = xx * xx + yy * yy <= rc * rc
+    drop = lowf - ndimage.minimum_filter(lowf, footprint=path, mode="constant", cval=g.shape[2])
     best, best_score = None, -1e18
     need = int(math.ceil((peg_depth + 1.0) / g.pitch))
     step = max(1, rad // 40)
@@ -695,8 +713,12 @@ def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
             gap = np.argmin(col) if not col.all() else len(col)
             run[i, j] = gap
             d = math.hypot(i - cx, j - cy) * g.pitch
-            # prefer columns that fit the socket, then close to the center of mass, then low
-            score = (1e6 if gap >= need else gap * 100) - d * 10 - low[i, j] * g.pitch
+            # prefer a broad part of the underside (a shallower socket in the belly beats a
+            # deep one up a fin), then columns that fit the socket, then close to the center
+            # of mass (as moved), then low
+            steep = rise[i, j] * g.pitch > post_r or drop[i, j] * g.pitch > 1.0
+            score = (1e6 if gap >= need else gap * 100) - (3e6 if steep else 0) \
+                - d * 10 - low[i, j] * g.pitch
             if score > best_score:
                 best, best_score = (i, j), score
     i, j = best

@@ -341,3 +341,19 @@ def test_a_gun_beside_its_turret_is_joined_to_the_model():
     labels, n = ndimage.label(g.v)
     assert n == 2 and labels[150, 50, 50] == labels[60, 50, 50]
     assert not g.v[190:, :, :].any()        # the strut doesn't poke out past the barrel's end
+
+
+def test_stand_peg_stays_off_a_fin_and_can_be_moved():
+    """The Stingray's bottom fin hangs under its center of mass: the post must not go
+    through it, and the user can move the peg along the ship."""
+    g = printprep.Grid([0, 0, 0], [60, 120, 30], 0.5, pad=2)
+    g.v[10:110, 20:220, 30:50] = True       # belly slab, 10 mm thick
+    g.v[58:62, 80:160, 6:30] = True         # thin fin hanging 12 mm under the middle
+    opts = printprep.PrintOptions(size_mm=120, stand="peg")
+    s = printprep.plan_stand(g, opts, log=lambda *_: None)
+    fin_x = g.origin[0] + 60 * g.pitch
+    assert abs(s.x - fin_x) > s.post_r + 0.5          # the post clears the fin
+    assert s.top_z > g.origin[2] + 25 * g.pitch       # it meets the belly, not the fin's edge
+    moved = printprep.plan_stand(g, printprep.PrintOptions(size_mm=120, stand="peg", stand_forward_mm=-30),
+                                 log=lambda *_: None)
+    assert moved.y < s.y - 20                         # toward the tail

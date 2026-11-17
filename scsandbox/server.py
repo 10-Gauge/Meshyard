@@ -341,7 +341,7 @@ PRINT_OPTS = {"size_mm": float, "scale": float, "mode": str, "voxel_mm": float, 
               "min_feature_nozzles": float, "thicken": bool, "hollow_mm": float, "tilt_deg": float,
               "stand": str, "stand_height_mm": float, "part_overrides": dict,
               "stand_shape": str, "stand_text": lambda v: str(v)[:60], "stand_text2": lambda v: str(v)[:60],
-              "stand_scale": bool,
+              "stand_scale": bool, "stand_forward_mm": float, "stand_side_mm": float,
               "stand_logo": lambda v: re.sub(r"[^A-Za-z]", "", str(v))[:8]}  # manufacturer code or "auto"
 
 
