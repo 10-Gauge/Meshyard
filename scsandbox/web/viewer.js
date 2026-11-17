@@ -358,8 +358,19 @@ function tightBox(root) {
   const mid = (k) => centers.map((c) => c[k]).sort((a, b) => a - b)[centers.length >> 1];
   const m = new THREE.Vector3(mid("x"), mid("y"), mid("z"));
   const dist = centers.map((c) => c.distanceTo(m));
-  const sorted = dist.slice().sort((a, b) => a - b);
-  const limit = boxes.length < 20 ? Infinity : sorted[Math.floor(sorted.length * 0.98)] * 1.5 + 1;
+  const limit = strayLimit(dist);
   boxes.forEach((b, i) => { if (dist[i] <= limit) box.union(b); });
   return box;
+}
+
+// How far from the model's middle a part can sit and still belong to it: stray parts
+// are a few odd ones beyond a clear gap. A long ship's engines (the Javelin's, 200 m
+// back) run on continuously from the hull and stay in.
+function strayLimit(dist) {
+  if (dist.length < 20) return Infinity;
+  const d = dist.slice().sort((a, b) => a - b);
+  const gap = Math.max(2, 0.25 * d[Math.floor(d.length * 0.9)]);
+  for (let i = Math.floor(d.length * 0.9); i < d.length; i++)
+    if (d[i] - d[i - 1] > gap) return d[i - 1] + 1e-6;
+  return Infinity;
 }

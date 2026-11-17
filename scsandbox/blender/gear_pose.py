@@ -53,13 +53,28 @@ try:
     # The add-on leaves out some landing gear clips that play on the ship's own skeleton:
     # the Stingray's "landinggear_deploy" (its outer wings fold up and become the gear
     # legs). They are in the package's scene.json and play by name.
+    # The game tags each clip's uses: the landing gear's "Deploy" and "Retract" actions,
+    # each playing a clip forward or backward. The add-on names them "fragment:<i>:<clip>"
+    # in that order, and snapping one to its last frame gives the action's end state. So
+    # a landing gear "Deploy" fragment ends gear down whatever its clip is called (the
+    # Fury's gear clip is "VTOL_Deploy", the Prowler's "landing_mode_deploy_left").
+    gear_end = {}       # "fragment:i:clip" -> mode that puts the gear down
+    gear_clips = set()  # clips the game uses for the landing gear
     try:
         with open(os.path.join(os.path.dirname(bpy.data.filepath), "scene.json"), encoding="utf-8") as f:
             listed = (json.load(f).get("root_entity") or {}).get("animations") or []
         for a in listed:
-            frags = {re.sub(r"[^a-z]", "", (fr.get("fragment") or "").lower()) for fr in a.get("fragments") or []}
-            if a.get("name") and a["name"] not in names and "landinggear" in frags:
+            frags = [fr for fr in a.get("fragments") or []]
+            kinds = [re.sub(r"[^a-z]", "", (fr.get("fragment") or "").lower()) for fr in frags]
+            if not a.get("name") or "landinggear" not in kinds:
+                continue
+            gear_clips.add(a["name"])
+            if a["name"] not in names:
                 names.append(a["name"])
+            for i, fr in enumerate(frags):
+                tags = {t.lower() for t in fr.get("frag_tags") or []}
+                if kinds[i] == "landinggear" and tags & {"deploy", "retract"} and len(tags & {"deploy", "retract"}) == 1:
+                    gear_end[f"fragment:{i}:{a['name']}"] = "snap_last" if "deploy" in tags else "snap_first"
     except (OSError, ValueError):
         pass
     result["available"] = names
@@ -68,12 +83,23 @@ try:
     # Reclaimer's ".../reclaimer/lg_arm_deploy_main_left.caf"
     gear = re.compile(r"(?i)(landing_?gears?|(^|[_/:])lg_|gear|(^|_|:)landing_(deploy|retract|extend))")
 
+    def is_gear_clip(n):
+        return re.sub(r"^fragment:\d+:", "", n) in gear_clips
+
     def gear_plan(up):
         out = []
         for n in names:
             low = n.lower()
-            if not gear.search(low) or "compress" in low or "idle" in low or "wing" in low or "vtol" in low:
+            if n in gear_end:
+                down = gear_end[n]
+                out.append((n, ("snap_first" if down == "snap_last" else "snap_last") if up else down))
                 continue
+            if "compress" in low or "idle" in low or "door" in low:
+                continue
+            if not is_gear_clip(n) and (not gear.search(low) or "wing" in low or "vtol" in low):
+                continue
+            if n.startswith("fragment:") and is_gear_clip(n):
+                continue  # a tagged use that isn't deploy or retract (compress, idle)
             if "retract" in low:
                 out.append((n, "snap_last" if up else "snap_first"))
             elif "deploy" in low or "extend" in low:
@@ -133,8 +159,8 @@ try:
         # "vtol_mode_deploy" (Prowler Utility); not the gear's own VTOL variants ("lg_pl_vtol")
         for n in names:
             low = n.lower()
-            if re.search(r"(^|_|:)lg_|nozzle|flare|compress|idle", low):
-                continue
+            if re.search(r"(^|_|:)lg_|nozzle|flare|compress|idle", low) or is_gear_clip(n):
+                continue  # not the Fury's "VTOL_Deploy", which is its landing gear
             m = re.search(r"(vtol|nacelles?)(_mode)?(_(deploy|open|extend|retract|close))?$", low)
             if not m:
                 continue
@@ -142,14 +168,19 @@ try:
             plan.append((n, "snap_first" if closing else "snap_last"))
     else:
         # "cannons_deploy" (Alpha Wolf), "weapons_deploy" and "Missile_deploy" (M80),
-        # "guns_retract", "turret_deploy", ...
-        weapon = re.compile(r"(?i)(weapon|cannon|gun|missile|torpedo|rocket|turret)s?_(deploy|retract|open|close)")
+        # "guns_retract", "turret_deploy", the Eclipse's "missile_01_deploy", the Hornet's
+        # "missile_bay_left_open", the Lightning's "weapon_nose_left_deploy", the
+        # Gladiator's "bomber_doors_open", the Sabre's "bay_doors_open"
+        weapon = re.compile(
+            r"(?i)(?:^|[_/:])(?:weapons?|cannons?|guns?|missiles?|missilebays?|torpedo(?:e?s)?|rockets?|turrets?"
+            r"|bomb(?:er)?|bay)(?:_[a-z0-9]+){0,3}?_(deploy|retract|open|close)(?:_(?:left|right|\d+))?(?:\.caf)?$")
+        not_weapon = re.compile(r"(?i)seat|enter|exit|ladder|cockpit|canopy|cargo|turret_door|operator|pilot")
         out = kind == "weapons_out"
         for n in names:
             m = weapon.search(n)
-            if not m:
+            if not m or not_weapon.search(n):
                 continue
-            opening = m.group(2).lower() in ("deploy", "open")
+            opening = m.group(1).lower() in ("deploy", "open")
             plan.append((n, "snap_last" if opening == out else "snap_first"))
     objs = [o for o in bpy.data.objects if o.type in {"EMPTY", "MESH"}]
     bind = {o.name: o.matrix_world.copy() for o in objs}
@@ -196,7 +227,13 @@ try:
         # the export's, so both ends move its legs, but the down end lowers them much more.
         (up, up_drop), (down, down_drop) = most_moved(gear_plan(True)), most_moved(gear_plan(False))
         result["gear_check"] = [up, round(up_drop, 1), down, round(down_drop, 1)]
-        if down > 20 and (up * 4 < down or down_drop > max(20.0, 1.3 * up_drop)):
+        # The Ironclad's and Basher's clips move whole legs: a handful of parts, all
+        # still at rest in the export with the gear up.
+        # A ship exported gear down lifts its gear going up (the Gladius: its gear-down end
+        # just stretches the struts a little past the export's), so the drop test only
+        # counts when going up doesn't lift much.
+        if (down > 20 and (up * 4 < down or (down_drop > max(20.0, 1.3 * up_drop) and up_drop > -0.5 * abs(down_drop)))) \
+                or (up == 0 and down > 0 and down_drop > 0.3):
             plan += gear_plan(False)
             result["gear_down"] = True
 
