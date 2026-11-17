@@ -360,49 +360,44 @@ def closest_filament(hex_color: str) -> str:
     return min(BAMBU_PLA_BASIC, key=lambda n: dist(BAMBU_PLA_BASIC[n]))
 
 
-def _paint_code(n: int) -> str:
-    """Bambu Studio / PrusaSlicer per-triangle paint state for a whole triangle painted
-    with filament n (the TriangleSelector bit stream, written as hex)."""
-    if n <= 0:
-        return ""
-    if n < 3:
-        return "%X" % (n << 2)
-    return "%XC" % (n - 3)
-
-
 def write_bambu_3mf(out: Path, bodies: list[tuple[str, trimesh.Trimesh]], faces: dict[str, np.ndarray],
                     colors: list[str], title: str = "model") -> Path:
-    """A 3MF that Bambu Studio opens already painted: each triangle carries its filament
-    (paint_color, and PrusaSlicer's mmu_segmentation for other slicers), and the project
-    lists one filament per color. Bodies without painting take filament 1."""
+    """A 3MF that Bambu Studio opens in its colors: each triangle carries its color as a
+    standard 3MF color group entry, which Bambu Studio offers to match to filaments when
+    it opens the file. (Bambu's own paint_color marks only filament slots, and Bambu
+    drops the filament colors of a 3MF it didn't write itself, so a Stingray came out in
+    whatever filaments the printer had loaded.) Bodies without painting stay uncolored."""
     import io
     import zipfile
     from xml.sax.saxutils import escape
     out = Path(out)
     objects, items = [], []
+    group = len(bodies) + 1   # the color group's resource id, after the objects
     for k, (name, m) in enumerate(bodies, start=1):
         v = np.asarray(m.vertices, float)
         f = np.asarray(m.faces, int)
         paint = faces.get(name)
         buf = io.StringIO()
-        buf.write(f'  <object id="{k}" type="model" name="{escape(name)}">\n   <mesh>\n    <vertices>\n')
+        # the 3MF spec wants an object-level property when its triangles carry their own
+        props = f' pid="{group}" pindex="0"' if paint is not None and colors else ""
+        buf.write(f'  <object id="{k}" type="model" name="{escape(name)}"{props}>\n   <mesh>\n    <vertices>\n')
         buf.writelines(f'     <vertex x="{x:.4f}" y="{y:.4f}" z="{z:.4f}"/>\n' for x, y, z in v)
         buf.write('    </vertices>\n    <triangles>\n')
         for i, (a, b, c) in enumerate(f):
-            code = _paint_code(int(paint[i])) if paint is not None else ""
-            extra = f' paint_color="{code}" slic3rpe:mmu_segmentation="{code}"' if code else ""
+            n = int(paint[i]) if paint is not None else 0
+            extra = f' pid="{group}" p1="{n - 1}"' if 0 < n <= len(colors) else ""
             buf.write(f'     <triangle v1="{a}" v2="{b}" v3="{c}"{extra}/>\n')
         buf.write('    </triangles>\n   </mesh>\n  </object>\n')
         objects.append(buf.getvalue())
         items.append(f'  <item objectid="{k}" printable="1"/>\n')
+    palette = (f'  <m:colorgroup id="{group}">\n' + "".join(f'   <m:color color="{c.upper()}FF"/>\n' for c in colors)
+               + '  </m:colorgroup>\n') if colors else ""
     model = ('<?xml version="1.0" encoding="UTF-8"?>\n'
              '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"'
-             ' xmlns:BambuStudio="http://schemas.bambulab.com/package/2021"'
-             ' xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06">\n'
+             ' xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">\n'
              f' <metadata name="Title">{escape(title)}</metadata>\n'
              ' <metadata name="Application">Meshyard</metadata>\n'
-             ' <metadata name="slic3rpe:MmPaintingVersion">1</metadata>\n'
-             ' <resources>\n' + "".join(objects) + ' </resources>\n <build>\n' + "".join(items) + ' </build>\n</model>\n')
+             ' <resources>\n' + palette + "".join(objects) + ' </resources>\n <build>\n' + "".join(items) + ' </build>\n</model>\n')
     n = len(colors)
     project = {
         "filament_colour": colors,
