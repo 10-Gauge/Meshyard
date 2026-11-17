@@ -73,6 +73,11 @@ try:
             if a.get("name") and a["name"] not in names and \
                     re.search(r"(?i)(door|airlock|hatch|ramp|canopy|cockpit)\w*_(close|open|deploy|retract)", a["name"]):
                 names.append(a["name"])
+            # each leg's own clip, when the ship's gear clip only moves a dummy (the
+            # Basher's ".../landing_gear/glsn_basher_lg_rear_left_landing_gear_retract.caf")
+            if a.get("name") and a["name"] not in names and not frags and \
+                    re.search(r"(?i)landing_?gear/.*landing_?gear_(deploy|retract)\.caf$", a["name"]):
+                names.append(a["name"])
             if not a.get("name") or "landinggear" not in kinds:
                 continue
             gear_clips.add(a["name"])

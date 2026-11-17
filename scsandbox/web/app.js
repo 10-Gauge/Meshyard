@@ -413,9 +413,10 @@ $("b-print").onclick = async () => {
         r.colors.forEach((hex, i) => {
           const sw = document.createElement("span");
           sw.className = "swatch";
-          sw.title = hex;
+          const name = (r.color_names || [])[i];
+          sw.title = name ? `${hex}, closest Bambu PLA Basic: ${name}` : hex;
           sw.style.background = hex;
-          c.append(` ${i + 1} `, sw, ` ${hex}`);
+          c.append(` ${i + 1} `, sw, name ? ` ${name}` : ` ${hex}`);
         });
         box.append(c);
       }

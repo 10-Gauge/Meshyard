@@ -281,6 +281,33 @@ def _smooth_labels(mesh: trimesh.Trimesh, labels: np.ndarray, k: int, passes: in
     return lab
 
 
+# Bambu Lab PLA Basic colors (approximate), to say which spool suits each painted slot
+BAMBU_PLA_BASIC = {
+    "Jade White": "#FFFFFF", "Light Gray": "#D1D3D5", "Silver": "#A6A9AA", "Gray": "#8E9089",
+    "Dark Gray": "#545454", "Black": "#000000", "Blue Gray": "#5B6579", "Beige": "#F7E6DE",
+    "Gold": "#E4BD68", "Bronze": "#847D48", "Brown": "#9D432C", "Cocoa Brown": "#6F5034",
+    "Red": "#C12E1F", "Maroon Red": "#9D2235", "Magenta": "#EC008C", "Pink": "#F55A74",
+    "Orange": "#FF6A13", "Pumpkin Orange": "#FF9016", "Yellow": "#F4EE2A",
+    "Sunflower Yellow": "#FEC600", "Bright Green": "#BECF00", "Bambu Green": "#00AE42",
+    "Mistletoe Green": "#3F8E43", "Turquoise": "#00B1B7", "Cyan": "#0086D6",
+    "Cobalt Blue": "#0056B8", "Blue": "#0A2989", "Purple": "#5E43B7", "Indigo Purple": "#482960",
+}
+
+
+def closest_filament(hex_color: str) -> str:
+    """The Bambu PLA Basic color nearest to hex_color (weighted RGB distance)."""
+    def rgb(h):
+        h = h.lstrip("#")
+        return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    r, g, b = rgb(hex_color)
+
+    def dist(h):
+        r2, g2, b2 = rgb(h)
+        rm = (r + r2) / 2
+        return (2 + rm / 256) * (r - r2) ** 2 + 4 * (g - g2) ** 2 + (2 + (255 - rm) / 256) * (b - b2) ** 2
+    return min(BAMBU_PLA_BASIC, key=lambda n: dist(BAMBU_PLA_BASIC[n]))
+
+
 def _paint_code(n: int) -> str:
     """Bambu Studio / PrusaSlicer per-triangle paint state for a whole triangle painted
     with filament n (the TriangleSelector bit stream, written as hex)."""
@@ -1492,6 +1519,7 @@ def prepare(glb: Path, out: Path, opts: PrintOptions, log=print) -> dict:
         if painted:
             files = [str(write_bambu_3mf(out, bodies, {"model": painted[0]}, painted[1], out.stem))]
             report["colors"] = painted[1]
+            report["color_names"] = [closest_filament(c) for c in painted[1]]
         else:
             files = write_bodies(bodies, out, fmt)
         report.update(files=files, bodies=len(bodies),

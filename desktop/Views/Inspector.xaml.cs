@@ -569,7 +569,12 @@ public sealed partial class Inspector : UserControl
             if (r.Long("thickened") > 0) parts.Add($"{r.Long("thickened")} thin parts thickened to {r.Num("min_feature_mm"):0.##} mm");
             var colors = r.Items("colors").Select(c => c.GetValue<string>()).ToList();
             if (colors.Count > 0)  // painted 3MF: which color goes in which filament slot
-                parts.Add("painted for Bambu Studio, filaments " + string.Join(", ", colors.Select((c, i) => $"{i + 1} {c}")));
+            {
+                // the closest Bambu PLA Basic color names the spool to load in each slot
+                var names = r.Items("color_names").Select(c => c.GetValue<string>()).ToList();
+                parts.Add("painted for Bambu Studio, filaments " + string.Join(", ", colors.Select((c, i) =>
+                    i < names.Count ? $"{i + 1} {c} ({names[i]})" : $"{i + 1} {c}")));
+            }
             var files = r.Items("files").Select(f => f.GetValue<string>()).ToList();
             ShowResult(PrintResult, InfoBarSeverity.Success, $"{size} mm ({r.Str("scale")})", string.Join(" · ", parts), files);
             _ = ShowLastPrint(t);

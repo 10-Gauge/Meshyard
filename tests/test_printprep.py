@@ -445,3 +445,9 @@ def test_tiny_shells_are_dropped_after_the_surface_fit():
     out = printprep.drop_small_shells(trimesh.util.concatenate([body, wing, speck]), log=lambda *_: None)
     vols = sorted(abs(s.volume) for s in out.split(only_watertight=False))
     assert vols == pytest.approx([125, 8000])
+
+
+def test_closest_filament_names_a_bambu_color():
+    assert printprep.closest_filament("#FEFEFE") == "Jade White"
+    assert printprep.closest_filament("#8a8c8e") == "Gray"
+    assert printprep.closest_filament("#c02a20") == "Red"
