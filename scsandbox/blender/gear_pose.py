@@ -49,7 +49,19 @@ try:
 
     root = next(o for o in bpy.data.objects if o.get("starbreaker_package_root"))
     package = po._load_package_from_root(root)
-    names = po.available_package_animation_names(package)
+    names = list(po.available_package_animation_names(package))
+    # The add-on leaves out some landing gear clips that play on the ship's own skeleton:
+    # the Stingray's "landinggear_deploy" (its outer wings fold up and become the gear
+    # legs). They are in the package's scene.json and play by name.
+    try:
+        with open(os.path.join(os.path.dirname(bpy.data.filepath), "scene.json"), encoding="utf-8") as f:
+            listed = (json.load(f).get("root_entity") or {}).get("animations") or []
+        for a in listed:
+            frags = {re.sub(r"[^a-z]", "", (fr.get("fragment") or "").lower()) for fr in a.get("fragments") or []}
+            if a.get("name") and a["name"] not in names and "landinggear" in frags:
+                names.append(a["name"])
+    except (OSError, ValueError):
+        pass
     result["available"] = names
     plan = []
     gear = re.compile(r"(?i)(landing_?gears?|(^|_)lg_|gear)")

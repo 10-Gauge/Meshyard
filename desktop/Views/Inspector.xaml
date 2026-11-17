@@ -95,7 +95,7 @@
                 </Grid>
 
                 <Grid x:Name="FlightRow" ColumnSpacing="12" Margin="2,0,0,0"
-                      ToolTipService.ToolTip="Show and print the ship in flight mode: the Stingray opens its flaps, the Reliant stands its wings upright, the Corsair spreads them">
+                      ToolTipService.ToolTip="Show and print the ship in flight mode: the Stingray draws its wings in and stands its wingtip fins up, the Reliant stands its wings upright, the Corsair spreads them">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
