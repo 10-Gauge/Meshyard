@@ -213,9 +213,17 @@ try:
             r"|bomb(?:er)?|bay)(?:_[a-z0-9]+){0,3}?_(deploy|retract|open|close)(?:_(?:left|right|\d+))?(?:\.caf)?$")
         not_weapon = re.compile(r"(?i)seat|enter|exit|ladder|cockpit|canopy|cargo|turret_door|operator|pilot|rack|component|locker")
         out = kind == "weapons_out"
+        # Gun covers that open on their own ("weapon_left_close" on the Stingray's top wing
+        # guns: the game's open-all-exterior action) stay shut when the ship has a separate
+        # clip that brings its guns out; missile and bomb bays still open.
+        covers = re.compile(r"(?i)(?:^|[_/:])(?:weapons?|guns?)(?:_(?:left|right|top|\d+))*_(open|close)(?:\.caf)?$")
+        has_deploy = any(weapon.search(n) and not not_weapon.search(n)
+                         and weapon.search(n).group(1).lower() in ("deploy", "retract") for n in names)
         for n in names:
             m = weapon.search(n)
             if not m or not_weapon.search(n):
+                continue
+            if has_deploy and covers.search(n):
                 continue
             opening = m.group(1).lower() in ("deploy", "open")
             plan.append((n, "snap_last" if opening == out else "snap_first"))
