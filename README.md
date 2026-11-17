@@ -1,14 +1,22 @@
-# SC Asset Browser
+# Asset Lens
 
-Browse every ship, vehicle, weapon, prop and piece of armor in your Star Citizen install, look at it in 3D, and turn it into something you can print or open in Blender.
+Browse the vehicles, weapons, props and armor inside a game you own, look at them in 3D, and turn them into something you can print or open in Blender.
 
-![The Browse page with the Anvil F8C Lightning Executive Edition loaded: search results on the left, the 3D view in the middle, and the paint, landing gear, weapons, VTOL, flight mode and 3D print options on the right](docs/images/app-browse.png)
+Asset Lens reads the packed data files that CryEngine-family games ship with (`.p4k` and `.pak` archives holding `.cgf`, `.cga` and `.skin` models). Point it at a game's data file and it builds a searchable list of everything inside.
 
-It runs on your own PC against your own copy of the game. It only ever reads `Data.p4k`, it doesn't talk to CIG's servers, and it never touches the game client or Easy Anti-Cheat. Anything you pull out of the game is CIG's work, so keep it for your own use and don't share the files around.
+It runs on your own PC against your own copy of the game. It only ever reads the game's data file. It doesn't talk to any game servers, and it never touches the game client or its anti-cheat. Anything you pull out of a game belongs to whoever made that game, so keep it for your own use and don't share the files around.
+
+## Supported games
+
+| Game data | What works |
+|-----------|------------|
+| `Data.p4k` (LIVE, PTU and other channels) | Everything in this README: the full item list, paints, landing gear and other moving parts, characters, printing and export |
+
+Pick which game to open from the game menu at the top of the window. The app looks for a supported game on its own when it starts, so most people never need to touch it.
 
 ## Getting started
 
-Grab **[SC-Asset-Browser.exe](https://github.com/10-Gauge/SC-Asset-Browser/releases/latest/download/SC-Asset-Browser.exe)** and double-click it. There's no installer. It's around 200 MB, and the tools it uses to read the game files come inside it.
+Grab **[Asset-Lens.exe](https://github.com/10-Gauge/SC-Asset-Browser/releases/latest/download/Asset-Lens.exe)** and double-click it. There's no installer. It's around 200 MB, and the tools it uses to read game files come inside it.
 
 The one thing it doesn't bring along is [Blender](https://www.blender.org/download/). Browsing, previews, 3D printing and most exports work fine without it. You only need it for the landing gear, weapon, VTOL and flight mode switches, for FBX, USDZ and `.blend` export, and for the sandbox. It's free. If the app can't find Blender, it tells you on first launch and gives you a download link. After that a note stays at the top of the window, with a **Check again** button for once you've installed it.
 
@@ -19,7 +27,7 @@ Every time you open the app it checks GitHub for a newer version. If there is on
 The first launch takes a little longer than usual:
 
 1. It unpacks its tools into `%LOCALAPPDATA%\sc-sandbox\tools`. That takes a few seconds and only happens once per version.
-2. It finds your game (see [Finding your game](#finding-your-game) below). If it can't, click **Choose game folder…** and point it at your `StarCitizen` folder, the one with `LIVE` inside it.
+2. It finds your game (see [Finding your game](#finding-your-game) below). If it can't, click **Choose game data…** and point it at the game's data file, or the folder it sits in.
 3. It reads the game's item database and builds a search index. Give it a few minutes. This happens once per patch, and after that searching is instant.
 
 ## Using it
@@ -28,27 +36,22 @@ The pages down the left side are **Browse**, **Characters**, **Blender sandbox**
 
 ### Browse
 
-Search for anything by name, filter by category, and click a result to load it in the 3D view. Ships with liveries in the game get a **Paint** list: pick one and the viewer, and anything you export from there, shows the ship in it. Liveries come through whole: each panel takes the paint color the livery gives it, metallic paints look metallic, and camo and stripe patterns show on the hull. The first time you pick a paint on a ship the app reads its liveries from the game, which takes a few seconds. The 300 series, Apollo and Hermes paints aren't supported yet. Drag to orbit, scroll to zoom, double-click to reset the camera. **Preview** loads a quick, lighter version; **Full detail** loads the real thing with all its textures.
+Search for anything by name, filter by category, and click a result to load it in the 3D view. Vehicles that come with liveries get a **Paint** list: pick one and the viewer, and anything you export from there, shows it in that paint. Liveries come through whole: each panel takes the color the livery gives it, metallic paints look metallic, and camo and stripe patterns show on the hull. The first time you pick a paint on a vehicle the app reads its liveries from the game, which takes a few seconds. A few liveries that use unusual material setups aren't supported yet. Drag to orbit, scroll to zoom, double-click to reset the camera. **Preview** loads a quick, lighter version; **Full detail** loads the real thing with all its textures.
 
-If you have LIVE and PTU installed, switch between them with the box at the top. They're indexed separately, so they never get mixed up.
+If you have more than one build of a game installed (a live build and a test build, say), switch between them with the box at the top. They're indexed separately, so they never get mixed up.
 
-For ships there are two switches in the panel on the right:
+For vehicles there are four switches in the panel on the right:
 
-- **Landing gear** shows the ship with its gear up and the gear doors shut, taken from the ship's own retract animation. The first time you do it for a ship it takes 10 to 30 seconds; after that it's instant. Ships that change shape on the ground show that shape with the gear down: the Eclipse, Stingray, Talon, Vanguard and Zeus fold their wings, the Clipper stands on its wings, and the Mole, Moth, Golem, Pitbull, Apollo, Hermes and others move engines or wings with their gear. The shape shows once you've raised the gear on that ship once.
+- **Landing gear** shows the vehicle with its gear up and the gear doors shut, taken from its own retract animation. The first time you do it for a vehicle it takes 10 to 30 seconds; after that it's instant. Some vehicles change shape on the ground, folding their wings or moving engines with their gear, and the app shows that shape with the gear down once you've raised the gear on that vehicle once.
+- **Weapons** shows deployable guns out, like hidden cannon pods or folding missile racks. Vehicles with fixed guns just say so.
+- **VTOL mode** swings the thrusters down for vertical flight. Vehicles without one just say so.
+- **Flight mode** shows vehicles that fly in a different shape, with wings drawn in, spread out or stood upright.
 
-![An Aegis Gladius in the 3D view with its landing gear down, seen from the front](docs/images/gladius-gear-down.png)
-
-*An Aegis Gladius in its stock paint with the landing gear down.*
-
-- **Weapons** shows deployable guns out, like the cannon pods on the Alpha Wolf or the guns and missile racks on the M80. Ships with fixed guns just say so.
-- **VTOL mode** swings the thrusters down for vertical flight, like the Starlifter's wing nacelles, the Paladin or the Golem. Ships without one just say so.
-- **Flight mode** shows ships that fly in a different shape: the Stingray draws its wings in and stands its wingtip fins up, the Reliant stands its wings upright and the Corsair spreads them.
-
-Both switches carry through to prints and exports, and you can use them together.
+All of them carry through to prints and exports, and you can use them together.
 
 ### 3D printing
 
-First pick a size. You can give it either a **Scale** like 1:500 or a **Longest side** in millimeters, and the app fills in the other one from the model's real size in the game. If you're printing a fleet, set the scale once: it sticks as you move from ship to ship, so a Gladius and an Idris come out at the right size next to each other.
+First pick a size. You can give it either a **Scale** like 1:500 or a **Longest side** in millimeters, and the app fills in the other one from the model's real size in the game. If you're printing a fleet, set the scale once: it sticks as you move from one model to the next, so a small fighter and a large capital ship come out at the right size next to each other.
 
 Click **Export printable file** and you get a single watertight 3MF or STL that drops straight into your slicer. Behind the scenes it does the cleanup you'd otherwise spend an evening on in Blender:
 
@@ -57,30 +60,18 @@ Click **Export printable file** and you get a single watertight 3MF or STL that 
 - Thickens anything too thin to print, like antennas, gun barrels and fins. The default minimum is three nozzle widths. **Find thin parts…** lists them at your chosen size, in case you'd rather make one thicker or leave it off and use brass rod instead.
 - Places it on the bed, Z up.
 
-![An Anvil Paladin exported at 300 mm with a separate peg stand and name plate, opened in 3D Builder](docs/images/paladin-print-export.png)
-
-*An Anvil Paladin exported at 300 mm, with the peg stand and a name plate showing the Anvil logo.*
-
 **Detail** is the mesh resolution: 0.2 mm is a good default, 0.1 mm suits resin, and 0.3 to 0.4 mm is fine for a quick FDM print. Very large models keep up to 4 million triangles so panel lines and edges stay sharp.
 
-**Paint colors** (3MF only) paints the print for a multi-color printer. Pick how many filaments you have, from 2 to 16, and the export colors every surface from the ship: hull, trim, canopy and markings, reduced to that many colors. Bambu Studio opens it already painted, with filaments 1 to N assigned; the app lists which color goes in which slot and names the closest Bambu PLA Basic color for each, so you know which spool to load. Pick a **Paint** first and the print comes out in that livery.
+**Paint colors** (3MF only) paints the print for a multi-color printer. Pick how many filaments you have, from 2 to 16, and the export colors every surface from the model: hull, trim, canopy and markings, reduced to that many colors. Bambu Studio opens it already painted, with filaments 1 to N assigned; the app lists which color goes in which slot and names the closest Bambu PLA Basic color for each, so you know which spool to load. Pick a **Paint** first and the print comes out in that livery.
+
 Some other options worth knowing:
 
-- **Stand.** *Separate stand, pegs into a socket* prints a base and post, and cuts a matching socket under the model so you can print the ship flat and press it on. The other option fuses the stand to the model. The app puts the peg under the ship's balance point on a broad part of the underside, clear of fins. The viewer shows where it will go, as an orange socket and a see-through post, and follows along when you change **Peg forward** or **Peg right** to move it somewhere else. Turn on **Show on stand** to see the whole ship sitting on the stand those settings make, seen from the stand's front: base, post height, incline and tilt included. The front edge (where the name plate goes) shows lighter, with FRONT on the floor in front of it. A few seconds after you change a setting, the viewer swaps in the stand the export will build, at preview detail: plate, lettering, logo, posts and colors.
-- **Base.** *Round*, or *Rectangle with name plate*. The name plate has a sloped front with raised lettering: the ship name, an optional smaller second line (a ship's own name, a motto, a date), and the manufacturer's logo embossed beside the text. Turn on **Scale on the plate** to add the print scale too, like 1:85.
+- **Stand.** *Separate stand, pegs into a socket* prints a base and post, and cuts a matching socket under the model so you can print it flat and press it on. The other option fuses the stand to the model. The app puts the peg under the model's balance point on a broad part of the underside, clear of fins. The viewer shows where it will go, as an orange socket and a see-through post, and follows along when you change **Peg forward** or **Peg right** to move it somewhere else. Turn on **Show on stand** to see the whole model sitting on the stand those settings make, seen from the stand's front: base, post height, incline and tilt included. The front edge (where the name plate goes) shows lighter, with FRONT on the floor in front of it. A few seconds after you change a setting, the viewer swaps in the stand the export will build, at preview detail: plate, lettering, logo, posts and colors.
+- **Base.** *Round*, or *Rectangle with name plate*. The name plate has a sloped front with raised lettering: the name, an optional smaller second line (a nickname, a motto, a date), and the maker's logo from the game files embossed beside the text. Turn on **Scale on the plate** to add the print scale too, like 1:85.
 - **On the stand, the nose points to the right** when you face the stand's front (the name plate side), with the right wing toward you.
-- **Base width** and **Base depth** set the base size (0 sizes it from the model). **Posts** adds a second post, fore and aft, for long or heavy prints. The note under the stand settings says how far the ship's balance point sits inside the base edge, and warns if it would tip over.
-- With **Paint colors** on, **Base color**, **Logo color**, **Text color** and **Second line color** pick the stand's filaments from the Bambu PLA Basic colors. They're added to the 3MF's filament list, reusing a ship color that matches.
-- **Incline** lifts the nose (negative dips it). **Tilt** banks the ship: positive drops the right wing toward the front of the stand, negative drops the left wing away from it. The socket still comes out full depth at any angle.
-
-![A Kruger L-22 Alpha Wolf on its stand in the 3D view, seen from the stand's front: landing gear up, weapons deployed, a black rectangular base with the Kruger logo and the ship's name in white, inclined 10 degrees and tilted 15 degrees](docs/images/alpha-wolf-stand.png)
-
-*Show on stand: a Kruger L-22 Alpha Wolf with its gear up and weapons deployed, on a black name plate base with the logo and name in white, at 10° incline and 15° tilt.*
-
-![An example export of the Alpha Wolf above as a pre-painted Bambu 3MF: the ship in its filament colors and the separate black stand with the white Kruger logo and name, side by side on the build plate](docs/images/alpha-wolf-painted-3mf.png)
-
-*An example export of the Alpha Wolf shown on its stand above, with the same settings. It's a Bambu 3MF that comes pre-painted: the ship is split into four filament colors taken from the livery picked in the **Paint** list (here the stock paint), and the stand prints in black with the logo and name in white. Open it in Bambu Studio and the painting is already done, with each color assigned to a filament slot. Exported at 150 mm (1:142).*
-
+- **Base width** and **Base depth** set the base size (0 sizes it from the model). **Posts** adds a second post, fore and aft, for long or heavy prints. The note under the stand settings says how far the model's balance point sits inside the base edge, and warns if it would tip over.
+- With **Paint colors** on, **Base color**, **Logo color**, **Text color** and **Second line color** pick the stand's filaments from the Bambu PLA Basic colors. They're added to the 3MF's filament list, reusing a model color that matches.
+- **Incline** lifts the nose (negative dips it). **Tilt** banks the model: positive drops the right wing toward the front of the stand, negative drops the left wing away from it. The socket still comes out full depth at any angle.
 - **Hollow walls** for resin prints. Remember to add drain holes in your slicer.
 - **Separate parts (kit)** gives you every part as its own body instead of one solid, for painting or building it up like a model kit.
 
@@ -94,26 +85,26 @@ Every print export is also written to a log (`print-log.csv` in the same folder)
 
 ### Characters
 
-The character builder puts a figure together from the armor and clothing in your install. Pick a male or female body and a head, then whatever you want them wearing: undersuit, helmet, torso, arms, legs, clothing, hair. Click **Build character** and the print and export panels work on the figure just like they do on a ship. For a figure, the size is its height (75 mm is a good place to start) and the stand goes under its feet.
+The character builder puts a figure together from the armor and clothing in the game. Pick a male or female body and a head, then whatever you want them wearing: undersuit, helmet, torso, arms, legs, clothing, hair. Click **Build character** and the print and export panels work on the figure just like they do on a vehicle. For a figure, the size is its height (75 mm is a good place to start) and the stand goes under its feet.
 
-**Pose** has five options: standing with arms at the sides, aiming (standing or kneeling), and low ready (standing or kneeling). **Weapon** picks what they're holding, and there are 51 different guns to choose from, plus all their skins.
+**Pose** has five options: standing with arms at the sides, aiming (standing or kneeling), and low ready (standing or kneeling). **Weapon** picks what they're holding, from every hand-held gun in the game, plus all their skins.
 
 The poses come from the game itself. Each gun is held the way the game holds that type of weapon, using the game's own animations:
 
-- Rifles, SMGs, shotguns, snipers, LMGs, the grenade launcher and the crossbow get the rifle stance.
+- Rifles, SMGs, shotguns, snipers, LMGs and grenade launchers get the rifle stance.
 - Pistols get a two-handed stance.
-- The railgun and rocket launchers sit on the shoulder.
+- Heavy weapons and rocket launchers sit on the shoulder.
 - The gun sits in the hand where the game puts it, and the other hand goes to that gun's own grip point.
 
-Low ready holds the gun lowered across the body, stock at the chest and muzzle down to the left. Arms at the sides is the game's standing idle, with a rifle hanging down the back stock up, a railgun or launcher hanging muzzle up on the right, or a pistol holstered on the thigh.
+Low ready holds the gun lowered across the body, stock at the chest and muzzle down to the left. Arms at the sides is the game's standing idle, with a rifle hanging down the back stock up, a heavy weapon hanging muzzle up on the right, or a pistol holstered on the thigh.
 
-A few cases don't have proper game animations, so they use a stance we built by hand: the Vendetta HMG (carried at the hip) and launchers on the female body. Every skin of a gun is held exactly like the base gun.
+A few weapons don't have proper game animations, so they use a stance we built by hand. Every skin of a gun is held exactly like the base gun.
 
 ### Blender sandbox
 
-Open the sandbox and Blender starts with a test scene: a ground grid, a sun, a camera and a 1.8 m figure for scale. Back in the app, choose **Spawn in Blender sandbox** on any asset and it appears in the scene. In Blender, press `N` and open the *SC Sandbox* tab.
+Open the sandbox and Blender starts with a test scene: a ground grid, a sun, a camera and a 1.8 m figure for scale. Back in the app, choose **Spawn in Blender sandbox** on any asset and it appears in the scene. In Blender, press `N` and open the *Asset Lens* tab.
 
-**Spawn animated** brings a ship in with its animations, so you can work the landing gear, cargo doors, ramps and canopies from the *StarBreaker* tab.
+**Spawn animated** brings a vehicle in with its animations, so you can work the landing gear, cargo doors, ramps and canopies from the *StarBreaker* tab.
 
 Keep the app open while you use the sandbox. Blender talks to it to fetch the models.
 
@@ -123,12 +114,12 @@ The sandbox runs in the Blender you have installed. When you open it, the app ad
 
 The app checks these places, in order:
 
-1. Any folder you've added yourself, under **Settings > Game** or with **Choose game folder…**.
-2. The RSI Launcher's own settings and logs in `%APPDATA%\rsilauncher`, which record where it installed the game.
-3. The usual install spots on every drive from C: to Z:, like `Program Files\Roberts Space Industries\StarCitizen`.
-4. If none of that turns anything up, it looks a few folders deep on each drive for a folder called `StarCitizen`.
+1. Any game data you've added yourself, from the game menu, with **Choose game data…**, or under **Settings > Game**.
+2. The game launcher's own settings and logs, which record where it installed the game.
+3. The usual install folders on every drive from C: to Z:.
+4. If none of that turns anything up, it looks a few folders deep on each drive for a game folder it recognizes.
 
-Inside that folder it picks up `LIVE`, `PTU`, `EPTU`, `HOTFIX` and `TECH-PREVIEW`. Each has a `build_manifest.id` file that says exactly which build it is. That's how the app notices a new patch and rebuilds its index for you, in the background, without being asked.
+When a game keeps several builds side by side (a live build and test builds), the app picks up each one. Most builds carry a small manifest file that says exactly which build it is. That's how the app notices a new patch and rebuilds its index for you, in the background, without being asked.
 
 ## When a patch lands
 
@@ -146,8 +137,8 @@ The app stands on the shoulders of some excellent free tools. StarBreaker and cg
 
 | Tool | What it does here | License |
 |------|-------------------|---------|
-| [StarBreaker](https://github.com/diogotr7/StarBreaker) | Reads `Data.p4k` and the game database, and exports ships with their loadouts. Its Blender add-on decodes the landing gear and weapon animations. | MIT |
-| [cgf-converter](https://github.com/Markemp/Cryengine-Converter) | Converts single model files, character skeletons and the game's animation files | GPL-2.0 |
+| [StarBreaker](https://github.com/diogotr7/StarBreaker) | Reads `.p4k` archives and the game database inside them, and exports vehicles with their loadouts. Its Blender add-on decodes the landing gear and weapon animations. | MIT |
+| [cgf-converter](https://github.com/Markemp/Cryengine-Converter) | Converts single model files, character skeletons and animation files | GPL-2.0 |
 | [Blender](https://www.blender.org) (not included) | The sandbox, the landing gear, weapon, VTOL and flight mode switches, and the FBX, USDZ and `.blend` exports | GPL-3.0 |
 | [three.js](https://threejs.org) | The 3D view | MIT |
 
@@ -161,32 +152,32 @@ cd SC-Asset-Browser
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-That sets up a virtual environment and downloads StarBreaker and cgf-converter. After that you can run the browser version with **SC Asset Browser.cmd** (it opens in your web browser at http://127.0.0.1:8765), or use the command line:
+That sets up a virtual environment and downloads StarBreaker and cgf-converter. After that you can run the browser version with **Asset Lens.cmd** (it opens in your web browser at http://127.0.0.1:8765), or use the command line:
 
 ```text
-sc-sandbox installs                          list the installs found and whether each is indexed
+sc-sandbox installs                          list the game builds found and whether each is indexed
 sc-sandbox update [-c PTU | --all]           index the current build
-sc-sandbox search gladius [-c PTU]           search the index
-sc-sandbox model AEGS_Gladius --out g.glb    export a model as GLB
-sc-sandbox print gladius --size 200          printable 3MF, 200 mm long
-sc-sandbox print gladius --scale 100         printable 3MF at 1:100
-sc-sandbox print gladius --mode parts --format stl   one STL per part
-sc-sandbox print gladius --stand peg --list-thin     list parts too thin to print at that size
+sc-sandbox search fighter [-c PTU]           search the index
+sc-sandbox model <entity> --out model.glb    export a model as GLB
+sc-sandbox print <name> --size 200           printable 3MF, 200 mm long
+sc-sandbox print <name> --scale 100          printable 3MF at 1:100
+sc-sandbox print <name> --mode parts --format stl    one STL per part
+sc-sandbox print <name> --stand peg --list-thin      list parts too thin to print at that size
 sc-sandbox print my_model.glb --glb          make any GLB printable
-sc-sandbox export gladius -f fbx             FBX, OBJ, glTF, DAE, USDZ and so on
+sc-sandbox export <name> -f fbx              FBX, OBJ, glTF, DAE, USDZ and so on
 sc-sandbox blender install | open            set up or open the Blender sandbox
 sc-sandbox tools update                      update StarBreaker and cgf-converter
 sc-sandbox schedule --time 09:00             re-index every day with Task Scheduler
 sc-sandbox config show | set KEY VALUE       settings (%LOCALAPPDATA%\sc-sandbox\settings.json)
 ```
 
-If your game is somewhere unusual, tell it where: `sc-sandbox config add-root "D:\Games\StarCitizen"`.
+If your game is somewhere unusual, tell it where: `sc-sandbox config add-root "D:\Games\<game folder>"`.
 
 ### How it fits together
 
 The desktop app (`desktop/`, C# and WinUI 3) is a front end. The real work happens in a Python engine (`scsandbox/`) that the app starts in the background and talks to over localhost. The 3D view is a three.js page in a WebView2 panel. When you close the window, the engine stops too.
 
-- `installs.py` finds the game and works out which build it is.
+- `installs.py` finds games and works out which build each one is.
 - `catalog.py` builds the search index.
 - `models.py` exports models, and `gear.py` poses landing gear, weapons, folded wings, VTOL and flight mode.
 - `printprep.py` is the print pipeline.
@@ -218,8 +209,8 @@ pip install -e .[dev]
 pytest
 ```
 
-The tests run the whole pipeline against a fake game install and a stand-in for StarBreaker, so you don't need the game, or even Windows, to run them.
+The tests run the whole pipeline against a fake game install and a stand-in for StarBreaker, so you don't need any game, or even Windows, to run them.
 
 ## License
 
-The code in this repo is under the [MIT License](LICENSE). That covers the code only. The game files, and anything you pull out of them, belong to Cloud Imperium Games. The bundled tools keep their own licenses, listed in [The tools behind it](#the-tools-behind-it).
+The code in this repo is under the [MIT License](LICENSE). That covers the code only. Game files, and anything you pull out of them, belong to the companies that made those games. Asset Lens isn't made by, endorsed by or connected to any game developer or publisher. The bundled tools keep their own licenses, listed in [The tools behind it](#the-tools-behind-it).
