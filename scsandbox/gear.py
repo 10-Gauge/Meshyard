@@ -31,7 +31,7 @@ import numpy as np
 from . import blendertools, models, tools
 from .installs import Install
 
-POSE_VERSION = 1
+POSE_VERSION = 2
 # pose kind -> (cache name, file suffix, what it is in messages)
 KINDS = {"gear": ("gearup", "gearup", "landing gear"),
          "weapons_out": ("weapons_out", "wout", "deployable weapons"),
@@ -257,6 +257,17 @@ def apply_pose(glb: Path, out: Path, pose: dict, log=print, hide_gear: bool = Tr
     return count
 
 
+def _pose_current(install: Install, asset: dict, kind: str) -> bool:
+    """Whether the cached pose for kind is from this POSE_VERSION (a missing cache counts
+    as current: there is nothing stale to throw away)."""
+    try:
+        return json.loads(_pose_path(install, asset, kind).read_text(encoding="utf-8")).get("version") == POSE_VERSION
+    except FileNotFoundError:
+        return True
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+
+
 def has_landed_shape(install: Install, asset: dict) -> bool:
     """Whether the ship's landed shape is known and differs from its export (worked out
     with its gear pose, so no Blender run is needed to answer)."""
@@ -275,7 +286,7 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
     shape once it's known: it's worked out alongside the gear-up pose."""
     glb = models.glb_for(install, settings, asset, variant, log=log)
     try:
-        landed_known = _pose_path(install, asset, "landed").exists()
+        landed_known = _pose_path(install, asset, "landed").exists() and _pose_current(install, asset, "landed")
     except (AttributeError, TypeError, OSError):
         landed_known = False
     if gear_up and not landed_known:
@@ -288,6 +299,8 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
         + ([f"weapons_{weapons}"] if weapons in ("out", "in") else []) + (["vtol"] if vtol else []) + (["flight"] if flight else [])
     for kind in kinds:
         out = glb.with_name(glb.name[:-4] + f".{KINDS[kind][1]}.glb")
+        if out.exists() and not _pose_current(install, asset, kind):
+            out.unlink(missing_ok=True)  # worked out by an older version of the pose rules
         if not (out.exists() and out.stat().st_mtime >= glb.stat().st_mtime):
             try:
                 pose = pose_for(install, settings, asset, log, kind=kind)

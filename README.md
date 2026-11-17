@@ -37,7 +37,7 @@ For ships there are two switches in the panel on the right:
 - **Landing gear** shows the ship with its gear up and the gear doors shut, taken from the ship's own retract animation. The first time you do it for a ship it takes 10 to 30 seconds; after that it's instant. Ships that change shape on the ground show that shape with the gear down: the Eclipse, Stingray, Talon, Vanguard and Zeus fold their wings, the Clipper stands on its wings, and the Mole, Moth, Golem, Pitbull, Apollo, Hermes and others move engines or wings with their gear. The shape shows once you've raised the gear on that ship once.
 - **Weapons** shows deployable guns out, like the cannon pods on the Alpha Wolf or the guns and missile racks on the M80. Ships with fixed guns just say so.
 - **VTOL mode** swings the thrusters down for vertical flight, like the Starlifter's wing nacelles, the Paladin or the Golem. Ships without one just say so.
-- **Flight mode** shows ships that fly in a different shape: the Stingray opens its flaps, the Reliant stands its wings upright and the Corsair spreads them.
+- **Flight mode** shows ships that fly in a different shape: the Stingray draws its wings in and stands its wingtip fins up, the Reliant stands its wings upright and the Corsair spreads them.
 
 Both switches carry through to prints and exports, and you can use them together.
 

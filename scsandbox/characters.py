@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from pathlib import Path
 
@@ -232,10 +233,11 @@ def weapon_kind(install: Install, asset: dict) -> str:
 SKELETONS = {"male": "Objects/Characters/Human/male_v7/export/bhm_skeleton_v7.chrparams",
              "female": "Objects/Characters/Human/female_v2/export/bhf_skeleton_v2.chrparams"}
 STANCE_DBAS = ("weapons/stocked/locomotion/stand.dba", "weapons/stocked/locomotion/crouch.dba",
+               "weapons/stocked/locomotion/stand/relaxed.dba",
                "weapons/pistol/locomotion/stand.dba", "weapons/pistol/locomotion/crouch.dba",
                "weapons/shouldered/locomotion/stand.dba", "weapons/shouldered/locomotion/crouch.dba",
                "weapons/no_weapon/locomotion/stand.dba")
-STANCES_VERSION = 1
+STANCES_VERSION = 2
 
 
 def stance_clips(install: Install, settings: dict, body: str, log=print):
@@ -267,6 +269,7 @@ def stance_clips(install: Install, settings: dict, body: str, log=print):
             glbs = sorted(conv.rglob("*.glb"), key=lambda q: q.stat().st_mtime, reverse=True)
             if not glbs:
                 raise tools.ToolError("cgf-converter wrote no file")
+            out.parent.mkdir(parents=True, exist_ok=True)   # no skins folder yet on a fresh install
             glbs[0].replace(out)
         except (tools.ToolError, OSError) as e:
             log(f"  game stances unavailable, using built-in ones: {str(e)[-200:]}")
@@ -346,11 +349,32 @@ def _rest_on_back(w, body_v, overlap=0.004):
     if not len(behind):
         return
     tree = cKDTree(behind[:, :2])
-    pts = w.vertices[::max(1, len(w.vertices) // 20000)]
-    hits = tree.query_ball_point(pts[:, :2], r=0.008, workers=-1)
-    gaps = [p[2] - behind[h, 2].max() for p, h in zip(pts, hits) if h]
-    if gaps:
-        w.vertices[:, 2] -= min(gaps) + overlap
+
+    def gaps():
+        pts = w.vertices[::max(1, len(w.vertices) // 20000)]
+        hits = tree.query_ball_point(pts[:, :2], r=0.008, workers=-1)
+        return np.array([(p[1], p[2] - behind[h, 2].max()) for p, h in zip(pts, hits) if h])
+
+    g = gaps()
+    if not len(g):
+        return
+    # a long gun touching only at the hips stands off the shoulder blades: tilt it about
+    # its lower contact until its top lies against the back as well
+    lo, hi = np.percentile(g[:, 0], [20, 80])
+    if hi - lo > 0.15:
+        bot, top = g[g[:, 0] <= lo], g[g[:, 0] >= hi]
+        b = bot[np.argmin(bot[:, 1])]
+        t = top[np.argmin(top[:, 1])]
+        ang = math.atan2(t[1] - b[1], t[0] - b[0])
+        if abs(ang) < math.radians(25):
+            c, s = math.cos(-ang), math.sin(-ang)
+            y, z = w.vertices[:, 1] - b[0], w.vertices[:, 2]
+            zc = float(np.median(w.vertices[:, 2]))
+            w.vertices[:, 1], w.vertices[:, 2] = b[0] + c * y - s * (z - zc), zc + s * y + c * (z - zc)
+            g = gaps()
+            if not len(g):
+                return
+    w.vertices[:, 2] -= g[:, 1].min() + overlap
 
 
 def build(install: Install, settings: dict, con, body: str, picks: dict, head: str | None,
@@ -410,7 +434,7 @@ def build(install: Install, settings: dict, con, body: str, picks: dict, head: s
     return out, name
 
 
-POSE_VERSION = 17  # bump when pose definitions change, so cached figures are rebuilt
+POSE_VERSION = 23  # bump when pose definitions change, so cached figures are rebuilt
 
 
 def figure_path(install: Install, name: str) -> Path:

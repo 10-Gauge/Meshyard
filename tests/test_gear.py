@@ -117,7 +117,7 @@ def test_posed_glb_stacks_gear_and_weapons_and_names_the_missing_pose(tmp_path, 
         if kind in ("weapons_in", "vtol", "flight"):
             raise gear.NoPose(f"this ship has no {gear.KINDS[kind][2]} animation")
         if kind == "landed":  # this ship looks the same on the ground
-            (tmp_path / "X.landed.json").write_text('{"version": 1, "blender": {"objects": {}}}')
+            (tmp_path / "X.landed.json").write_text(json.dumps({"version": gear.POSE_VERSION, "blender": {"objects": {}}}))
             raise gear.NoPose("this ship has no landed shape animation")
         return wpose
 

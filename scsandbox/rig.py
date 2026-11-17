@@ -597,6 +597,16 @@ def _hand_frame(x, z):
 GRIP = {"Index": (30, 35, 20), "Middle": (65, 70, 35), "Ring": (65, 70, 35), "Pinky": (65, 70, 35)}
 SUPPORT = {"Index": (35, 40, 25), "Middle": (45, 50, 30), "Ring": (50, 55, 30), "Pinky": (55, 55, 30)}
 LOOSE = {"Index": (8, 12, 8), "Middle": (12, 18, 10), "Ring": (15, 20, 10), "Pinky": (18, 22, 12)}
+# support hand wrapped round a handguard: fingers closed over the far side
+WRAP = {"Index": (45, 50, 30), "Middle": (60, 65, 35), "Ring": (62, 65, 35), "Pinky": (65, 65, 35)}
+
+
+def _support_frame(R, w) -> np.ndarray:
+    """Support hand under the handguard: palm up against it, fingers reaching across to
+    wrap the far (right) side, a little forward along the barrel; back of the hand down
+    and out to the left."""
+    f, u, r = R @ w.forward, R @ w.up, R @ w.right
+    return _hand_frame(0.35 * f + 0.75 * r + 0.55 * u, -0.8 * u - 0.5 * r)
 
 
 # The game mounts a held weapon (its origin, the grip) on RightWeaponBone, a child of
@@ -681,6 +691,20 @@ def _clip_pose(rig: Rig, clips: Clips, pose: str, weapon: Weapon):
         p.curl("Left", GRIP)
         return p.solve(base=base), M_w
     M_w = posed["RightHand"] @ WEAPON_BONE
+    if pose.startswith("ready") and weapon.kind == "stocked":
+        # the game's lowered stance: across the body, stock at the right chest, muzzle
+        # down toward the left side; both hands follow the gun
+        M_w = _lowered(weapon, posed["RightArm"][:3, 3], posed["LeftArm"][:3, 3])
+        R = M_w[:3, :3]
+        Rr = _hand_frame(R @ weapon.forward - R @ weapon.up * 0.55, R @ weapon.right)
+        p.ik("RightArm", "RightForeArm", "RightHand", apply(M_w, weapon.rgrip) - Rr @ np.array([0.07, 0.0, -0.03]),
+             pole=[1.0, -0.6, 0.6])
+        p.orient("RightHand", Rr)
+        p.ik("LeftArm", "LeftForeArm", "LeftHand", apply(M_w, weapon.lwrist), pole=[-0.6, -1.0, 0.4])
+        p.orient("LeftHand", _support_frame(R, weapon))
+        p.curl("Right", GRIP)
+        p.curl("Left", WRAP)
+        return p.solve(base=base), M_w
     if pose.startswith("ready"):
         pivot = apply(M_w, weapon.pad if weapon.kind == "shouldered" else weapon.butt)
         if weapon.kind == "pistol":
@@ -692,7 +716,26 @@ def _clip_pose(rig: Rig, clips: Clips, pose: str, weapon: Weapon):
         p.orient("RightHand", hand[:3, :3])
     p.ik("LeftArm", "LeftForeArm", "LeftHand", apply(M_w, weapon.lwrist),
          pole=[-0.8, -1.0, 0.3] if weapon.kind == "pistol" else [-0.6, -1.0, 0.0])
+    if weapon.kind != "pistol":
+        # the clip's own hand shape fits the gun it was made with, not this one
+        p.orient("LeftHand", _support_frame(M_w[:3, :3], weapon))
+        p.curl("Left", WRAP)
     return p.solve(base=base), M_w
+
+
+def _lowered(w: Weapon, rsh, lsh) -> np.ndarray:
+    """Placement for the lowered (low ready) rifle stance, from the shoulder positions:
+    the gun lies across the front of the body, nearly parallel to it, the stock at the
+    right chest and the muzzle pointing down to the left; its top faces outward."""
+    rsh, lsh = np.asarray(rsh, float), np.asarray(lsh, float)
+    fwd = np.array([-0.86, -0.40, -0.30])            # left, down, a little forward
+    fwd /= np.linalg.norm(fwd)
+    out = np.array([0.0, 0.25, -1.0])                # sights face away from the chest
+    up = out - fwd * float(np.dot(out, fwd))
+    up /= np.linalg.norm(up)
+    width = float(np.linalg.norm(rsh - lsh))
+    butt = rsh + np.array([-0.06 * width / 0.35, -0.13, -0.16])   # right chest, in front
+    return w.placement(fwd, up, w.butt, butt)
 
 
 def _arm_reach(p: Poser, side: str) -> float:
@@ -744,13 +787,30 @@ def _hold(p: Poser, weapon: Weapon, pose: str, y_shift: float) -> np.ndarray:
                     [0.11, eye[1] - 0.015 - float(np.dot(w.ads - w.butt, w.up)), sh[2] - 0.06])
     if aim:
         return M
-    butt = apply(M, w.butt)
-    return about(butt, rot([0, 1, 0], 10) @ rot([1, 0, 0], -36)) @ M
+    return _lowered(w, sh, p.pos("LeftArm") + [0, y_shift, 0])
 
 
 def build_pose(rig: Rig, pose: str, weapon: Weapon | None, back_z: float, clips: "Clips | None" = None):
     """(deltas per joint, weapon placement or None) for one of POSES. With the game's
     stance clips (clips), held weapons use the game's own stance for their kind."""
+    if (clips is not None and weapon is not None and pose == "ready_stand" and weapon.kind == "stocked"
+            and RELAXED_CLIP in clips.by_name):
+        # lowered rifle: the game's upright standing idle, the gun across the body
+        p = Poser(rig)
+        posed = clips.pose(RELAXED_CLIP, 0.0)
+        base = clip_deltas(rig, posed)
+        M_w = _lowered(weapon, posed["RightArm"][:3, 3], posed["LeftArm"][:3, 3])
+        R = M_w[:3, :3]
+        Rr = _hand_frame(R @ weapon.forward - R @ weapon.up * 0.55, R @ weapon.right)
+        p.ik("RightArm", "RightForeArm", "RightHand", apply(M_w, weapon.rgrip) - Rr @ np.array([0.07, 0.0, -0.03]),
+             pole=[1.0, -0.6, 0.6])
+        p.orient("RightHand", Rr)
+        p.ik("LeftArm", "LeftForeArm", "LeftHand", apply(M_w, weapon.lwrist), pole=[-0.6, -1.0, 0.4])
+        p.orient("LeftHand", _support_frame(R, weapon))
+        p.curl("Right", GRIP)
+        p.curl("Left", WRAP)
+        p.turn("Neck", rot([1, 0, 0], -8))
+        return p.solve(base=base), M_w
     if clips is not None and weapon is not None and pose != "relaxed":
         got = _clip_pose(rig, clips, pose, weapon)
         if got is not None:
@@ -786,12 +846,24 @@ def build_pose(rig: Rig, pose: str, weapon: Weapon | None, back_z: float, clips:
             thigh = p.pos("RightUpLeg")
             M_w = weapon.placement(np.array([0, -1.0, 0]), np.array([0, 0, -1.0]), weapon.center,
                                    [thigh[0] + 0.12, thigh[1] - 0.17, thigh[2] + 0.01])
-        elif weapon is not None:
-            # slung diagonally across the back, barrel up toward the left shoulder, lying on
-            # its side, then moved in until it rests against the back
-            fwd = np.array([-0.55, 0.83, 0.0])
+        elif weapon is not None and weapon.kind in ("shouldered", "heavy"):
+            # large special weapons (the Scourge railgun, launchers) hang the other way up:
+            # muzzle at the right shoulder, stock toward the ground, on the right of the back
+            fwd = np.array([0.0, 1.0, 0.0])
             side_up = np.cross([0, 0, 1.0], fwd)
-            M_w = weapon.placement(fwd, side_up, weapon.center, [0.0, 1.22, back_z])
+            M_w = weapon.placement(fwd, side_up, weapon.center, [0.10, 1.0, back_z])
+            y = (weapon.mesh.vertices @ M_w[:3, :3].T + M_w[:3, 3])[:, 1]
+            M_w[1, 3] += p.pos("Neck")[1] + 0.02 - float(y.max())   # muzzle level with the shoulders
+            z = (weapon.mesh.vertices @ M_w[:3, :3].T + M_w[:3, 3])[:, 2]
+            M_w[2, 3] += back_z + 0.005 - float(np.percentile(z, 3))
+        elif weapon is not None:
+            # on the back as the game carries it: straight down the spine, stock at the top
+            # and barrel toward the floor, lying on its side, then moved in until it rests
+            # against the back
+            fwd = np.array([0.0, -1.0, 0.0])
+            side_up = np.cross([0, 0, 1.0], fwd)
+            top = p.pos("Neck")[1] - 0.10                      # stock just below the shoulders
+            M_w = weapon.placement(fwd, side_up, weapon.butt, [0.0, top, back_z])
             z = (weapon.mesh.vertices @ M_w[:3, :3].T + M_w[:3, 3])[:, 2]
             M_w[2, 3] += back_z + 0.005 - float(np.percentile(z, 3))
         return (p.solve(base=relaxed_base) if relaxed_base else p.solve(root)), M_w
@@ -818,12 +890,12 @@ def build_pose(rig: Rig, pose: str, weapon: Weapon | None, back_z: float, clips:
         Rl = _hand_frame(w_fwd - w_up * 0.9, -w_right)
     else:
         # under the handguard at the game's support-hand target, palm toward the barrel
-        Rl = _hand_frame(w_fwd, -(R @ weapon.lpalm))
+        Rl = _support_frame(R, weapon)
     lh = apply(M_w, weapon.lwrist)
     p.ik("RightArm", "RightForeArm", "RightHand", rh, pole=pole_r)
     p.ik("LeftArm", "LeftForeArm", "LeftHand", lh, pole=pole_l)
     p.orient("RightHand", Rr)
     p.orient("LeftHand", Rl)
     p.curl("Right", GRIP)
-    p.curl("Left", GRIP if weapon.kind == "pistol" else SUPPORT)
+    p.curl("Left", GRIP if weapon.kind == "pistol" else WRAP)
     return p.solve(root), M_w

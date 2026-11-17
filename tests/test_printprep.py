@@ -326,3 +326,18 @@ def test_scale_sets_the_size_and_tilt_keeps_it(glb, tmp_path):
     assert tilted["scale"] == "1:100"
     assert printprep.file_tag(printprep.PrintOptions(scale=12.5)) == "1-12_5"
     assert printprep.file_tag(printprep.PrintOptions(size_mm=150)) == "150mm"
+
+
+def test_a_gun_beside_its_turret_is_joined_to_the_model():
+    """A barrel held by a gimbal the game leaves out fuses as its own shell; it gets a
+    strut to the body. Something far away is left alone."""
+    from scipy import ndimage
+    g = printprep.Grid([0, 0, 0], [40, 20, 20], 0.2, pad=2)
+    g.v[20:120, 20:80, 20:80] = True        # turret / hull
+    g.v[125:180, 45:55, 45:55] = True       # barrel 1 mm off its front
+    g.v[20:30, 20:30, 102:110] = True       # a piece 4.4 mm away
+    assert ndimage.label(g.v)[1] == 3
+    assert printprep.connect_pieces(g, 1.2, 3.0, log=lambda *_: None) == 1
+    labels, n = ndimage.label(g.v)
+    assert n == 2 and labels[150, 50, 50] == labels[60, 50, 50]
+    assert not g.v[190:, :, :].any()        # the strut doesn't poke out past the barrel's end

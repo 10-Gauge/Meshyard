@@ -20,6 +20,8 @@ The routine (solid mode)
               nozzle widths) by morphological opening, keep the ones that stick
               out (antennas, barrels, fins; not the edges of the hull) and grow
               them about their medial axis until they reach the minimum.
+              Loose pieces near the model (a gun beside its turret, held by a
+              gimbal the game leaves out) get a strut to the main body.
   6. Hollow   optional, for resin: keep a wall of `hollow_mm`.
   7. Stand    optional: a display stand, either a separate piece with a peg
               that fits a socket cut into the model, or fused to the model.
@@ -57,6 +59,10 @@ SMOOTH_SIGMA_VOXELS = 1.0
 SKIN_MM = 0.15
 # The stand is mostly flat faces: this many triangles keeps its lettering crisp.
 STAND_MAX_FACES = 600_000
+# Loose pieces (a gun beside its turret) up to this far from the model, or this share of
+# the print size if that is more, get a strut to the main body.
+JOIN_GAP_MM = 3.0
+JOIN_GAP_SHARE = 0.03
 # Disconnected pieces smaller than this many triangles are dropped after meshing.
 MIN_PIECE_FACES = 400
 # Always skipped, on top of exclude_nodes (older settings.json files pin an outdated list):
@@ -513,6 +519,59 @@ def _drop_specks(v: np.ndarray, min_voxels: int) -> None:
     if n > 1:
         sizes = ndimage.sum(v, labels, range(1, n + 1))
         v &= np.isin(labels, np.nonzero(sizes >= min_voxels)[0] + 1)
+
+
+def connect_pieces(g: Grid, min_mm: float, max_gap_mm: float, log=print) -> int:
+    """Join loose pieces to the main body with a short strut at their closest point.
+
+    Guns sit on their turret or remote turret through a gimbal with a small gap or a
+    pivot the game doesn't model, so after fusing a barrel can come out as its own shell:
+    it prints as a separate part, or falls off the bed. Each piece within max_gap_mm of
+    the main body gets a strut at least min_mm thick (or two voxels) across the gap.
+    Returns pieces joined."""
+    from scipy import ndimage
+    labels, n = ndimage.label(g.v)
+    if n <= 1:
+        return 0
+    sizes = ndimage.sum(g.v, labels, range(1, n + 1))
+    main = int(np.argmax(sizes)) + 1
+    reach = int(math.ceil(max_gap_mm / g.pitch)) + 1
+    r = max(2, int(math.ceil(max(min_mm, 0.6) / 2 / g.pitch)))
+    ball = _ball(r)
+    joined, far = 0, 0
+    for lab, box in enumerate(ndimage.find_objects(labels), start=1):
+        if lab == main or box is None:
+            continue
+        sl = tuple(slice(max(0, s.start - reach), min(dim, s.stop + reach)) for s, dim in zip(box, g.shape))
+        sub = labels[sl]
+        if not (sub == main).any():
+            far += 1
+            continue
+        dist, idx = ndimage.distance_transform_edt(sub != main, return_indices=True)
+        piece = sub == lab
+        d = np.where(piece, dist, np.inf)
+        a = np.unravel_index(int(np.argmin(d)), d.shape)
+        if d[a] * g.pitch > max_gap_mm:
+            far += 1
+            continue
+        b = tuple(int(idx[k][a]) for k in range(3))
+        a0 = np.array(a) + [s.start for s in sl]
+        b0 = np.array(b) + [s.start for s in sl]
+        # a strut from inside the piece to inside the body, so both ends overlap
+        length = float(np.linalg.norm(b0 - a0))
+        over = r / max(length, 1.0)  # reach one strut radius past each end
+        for t in np.linspace(-over, 1 + over, 2 * int(np.ceil(length + 2 * r)) + 3):
+            c = np.round(a0 + (b0 - a0) * t).astype(int)
+            lo = np.maximum(c - r, 0)
+            hi = np.minimum(c + r + 1, g.shape)
+            bl = ball[tuple(slice(l - (cc - r), h - (cc - r)) for l, h, cc in zip(lo, hi, c))]
+            g.v[tuple(slice(l, h) for l, h in zip(lo, hi))] |= bl
+        joined += 1
+    if joined:
+        log(f"  joined {joined} loose piece(s) (guns on turrets and the like) to the model")
+    if far:
+        log(f"  {far} piece(s) more than {max_gap_mm:g} mm from the model were left loose")
+    return joined
 
 
 def thicken_thin_features(g: Grid, min_mm: float, log=print) -> dict:
@@ -1061,6 +1120,7 @@ def prepare(glb: Path, out: Path, opts: PrintOptions, log=print) -> dict:
         report["voxel_mm"] = round(g.pitch, 3)
         if opts.thicken and min_mm > 0:
             report.update(thicken_thin_features(g, min_mm, log))
+        report["joined"] = connect_pieces(g, min_mm, max(JOIN_GAP_MM, JOIN_GAP_SHARE * opts.size_mm), log)
         spec = plan_stand(g, opts, log) if opts.stand != "none" else None
         stand_h = opts.stand_height_mm
         if spec and opts.figure:
