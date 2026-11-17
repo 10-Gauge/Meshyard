@@ -28,7 +28,7 @@ The pages down the left side are **Browse**, **Characters**, **Blender sandbox**
 
 ### Browse
 
-Search for anything by name, filter by category, and click a result to load it in the 3D view. Ships with liveries in the game get a **Paint** list: pick one and the viewer, and anything you export from there, shows the ship in it. Drag to orbit, scroll to zoom, double-click to reset the camera. **Preview** loads a quick, lighter version; **Full detail** loads the real thing with all its textures.
+Search for anything by name, filter by category, and click a result to load it in the 3D view. Ships with liveries in the game get a **Paint** list: pick one and the viewer, and anything you export from there, shows the ship in it. Liveries come through whole: each panel takes the paint color the livery gives it, metallic paints look metallic, and camo and stripe patterns show on the hull. The first time you pick a paint on a ship the app reads its liveries from the game, which takes a few seconds. The 300 series, Apollo and Hermes paints aren't supported yet. Drag to orbit, scroll to zoom, double-click to reset the camera. **Preview** loads a quick, lighter version; **Full detail** loads the real thing with all its textures.
 
 If you have LIVE and PTU installed, switch between them with the box at the top. They're indexed separately, so they never get mixed up.
 
