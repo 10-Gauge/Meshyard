@@ -373,6 +373,8 @@ const FLARE = /decal_?glow|glow_?decal|headlights?_glow/i;
 function blank(m) {
   const attrs = (m.userData.semantic && m.userData.semantic.authored_attributes) || [];
   const gen = (attrs.find((a) => a.name === "StringGenMask") || {}).value || "";
+  // the HUD the game projects in front of the pilot: only its pixel grid comes through
+  if ((attrs.find((a) => a.name === "Shader") || {}).value === "UIPlane") return true;
   return !m.userData.diffuse_tex && /%STENCIL_MAP|%USE_RTT_UV_FOR_DIFFUSE/.test(gen);
 }
 
@@ -386,7 +388,14 @@ function tune(m) {
   const shader = attr("Shader"), surface = attr("SurfaceType");
   const layers = (ud.layers || []).map((l) => l.path || "").join(" ");
   const painted = /paint|plastic|rubber|fabric|leather|tile/i.test(m.name + " " + layers);
-  if (/decal/i.test(shader) || m.transparent) {
+  if (shader === "DisplayScreen") {
+    // screens show what the game draws at run time; the export only has their pixel
+    // grid (a bright blue pattern), so show them switched off
+    m.map = null; m.emissiveMap = null;
+    m.color.setRGB(0.015, 0.016, 0.02); m.emissive.setRGB(0, 0, 0);
+    m.metalness = 0; m.roughness = 0.15;
+    m.needsUpdate = true;
+  } else if (/decal/i.test(shader) || m.transparent) {
     m.roughness = Math.max(m.roughness, 0.45);
   } else if (!painted && (RAW_METAL.test(m.name) || /\/metal\//i.test(layers))) {
     m.metalness = 0.85;
