@@ -224,15 +224,26 @@ def paint_faces(mesh: trimesh.Trimesh, parts, colors: int, log=print) -> tuple[n
     pts, nrm, cols = [], [], []
     # the hull's inside faces and damage layers sit right behind the skin: leave them out
     seen = [(n, m) for n, m in parts if not HIDDEN_SURFACE.search(f"{n} {m.metadata.get('material', '')}")] or parts
-    total = sum(len(m.faces) for _, m in seen)
-    step = int(math.ceil(max(1.0, total / 4_000_000)))   # at most ~4M sample points
+    # Sample every surface evenly by area, not at its triangles' centers: a big panel made
+    # of a few large triangles had almost no samples, so the dense small parts beside and
+    # behind it won (the Stingray's red wings came out in ragged red and grey blotches).
+    rng = np.random.default_rng(7)
+    total_area = sum(float(m.area) for _, m in seen) or 1.0
+    budget = 4_000_000
     for _, m in seen:
-        c, n = np.asarray(m.triangles_center), np.asarray(m.face_normals)
-        if step > 1:
-            c, n = c[::step], n[::step]
+        area = np.asarray(m.area_faces, float)
+        if not len(area) or area.sum() <= 0:
+            continue
+        k = int(max(8, round(budget * area.sum() / total_area)))
+        fi = rng.choice(len(area), size=k, p=area / area.sum())
+        tri = np.asarray(m.triangles)[fi]
+        u, v = rng.random(k), rng.random(k)
+        flip = u + v > 1
+        u[flip], v[flip] = 1 - u[flip], 1 - v[flip]
+        c = tri[:, 0] + u[:, None] * (tri[:, 1] - tri[:, 0]) + v[:, None] * (tri[:, 2] - tri[:, 0])
         pts.append(c)
-        nrm.append(n)
-        cols.append(np.tile(np.array(m.metadata.get("rgb", NEUTRAL_RGB), float), (len(c), 1)))
+        nrm.append(np.asarray(m.face_normals)[fi])
+        cols.append(np.tile(np.array(m.metadata.get("rgb", NEUTRAL_RGB), float), (k, 1)))
     pts, nrm, cols = np.vstack(pts), np.vstack(nrm), np.vstack(cols)
     # Of the nearest original surfaces, take the closest one facing the same way: on a
     # thin wing the panel on the far side is about as near, and would speckle the paint.
