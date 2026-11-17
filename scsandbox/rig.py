@@ -597,6 +597,16 @@ def _hand_frame(x, z):
 GRIP = {"Index": (30, 35, 20), "Middle": (65, 70, 35), "Ring": (65, 70, 35), "Pinky": (65, 70, 35)}
 SUPPORT = {"Index": (35, 40, 25), "Middle": (45, 50, 30), "Ring": (50, 55, 30), "Pinky": (55, 55, 30)}
 LOOSE = {"Index": (8, 12, 8), "Middle": (12, 18, 10), "Ring": (15, 20, 10), "Pinky": (18, 22, 12)}
+# support hand wrapped round a handguard: fingers closed over the far side
+WRAP = {"Index": (45, 50, 30), "Middle": (60, 65, 35), "Ring": (62, 65, 35), "Pinky": (65, 65, 35)}
+
+
+def _support_frame(R, w) -> np.ndarray:
+    """Support hand under the handguard: palm up against it, fingers reaching across to
+    wrap the far (right) side, a little forward along the barrel; back of the hand down
+    and out to the left."""
+    f, u, r = R @ w.forward, R @ w.up, R @ w.right
+    return _hand_frame(0.35 * f + 0.75 * r + 0.55 * u, -0.8 * u - 0.5 * r)
 
 
 # The game mounts a held weapon (its origin, the grip) on RightWeaponBone, a child of
@@ -691,9 +701,9 @@ def _clip_pose(rig: Rig, clips: Clips, pose: str, weapon: Weapon):
              pole=[1.0, -0.6, 0.6])
         p.orient("RightHand", Rr)
         p.ik("LeftArm", "LeftForeArm", "LeftHand", apply(M_w, weapon.lwrist), pole=[-0.6, -1.0, 0.4])
-        p.orient("LeftHand", _hand_frame(R @ weapon.forward, -(R @ weapon.lpalm)))
+        p.orient("LeftHand", _support_frame(R, weapon))
         p.curl("Right", GRIP)
-        p.curl("Left", SUPPORT)
+        p.curl("Left", WRAP)
         return p.solve(base=base), M_w
     if pose.startswith("ready"):
         pivot = apply(M_w, weapon.pad if weapon.kind == "shouldered" else weapon.butt)
@@ -706,6 +716,10 @@ def _clip_pose(rig: Rig, clips: Clips, pose: str, weapon: Weapon):
         p.orient("RightHand", hand[:3, :3])
     p.ik("LeftArm", "LeftForeArm", "LeftHand", apply(M_w, weapon.lwrist),
          pole=[-0.8, -1.0, 0.3] if weapon.kind == "pistol" else [-0.6, -1.0, 0.0])
+    if weapon.kind != "pistol":
+        # the clip's own hand shape fits the gun it was made with, not this one
+        p.orient("LeftHand", _support_frame(M_w[:3, :3], weapon))
+        p.curl("Left", WRAP)
     return p.solve(base=base), M_w
 
 
@@ -792,9 +806,9 @@ def build_pose(rig: Rig, pose: str, weapon: Weapon | None, back_z: float, clips:
              pole=[1.0, -0.6, 0.6])
         p.orient("RightHand", Rr)
         p.ik("LeftArm", "LeftForeArm", "LeftHand", apply(M_w, weapon.lwrist), pole=[-0.6, -1.0, 0.4])
-        p.orient("LeftHand", _hand_frame(R @ weapon.forward, -(R @ weapon.lpalm)))
+        p.orient("LeftHand", _support_frame(R, weapon))
         p.curl("Right", GRIP)
-        p.curl("Left", SUPPORT)
+        p.curl("Left", WRAP)
         p.turn("Neck", rot([1, 0, 0], -8))
         return p.solve(base=base), M_w
     if clips is not None and weapon is not None and pose != "relaxed":
@@ -866,12 +880,12 @@ def build_pose(rig: Rig, pose: str, weapon: Weapon | None, back_z: float, clips:
         Rl = _hand_frame(w_fwd - w_up * 0.9, -w_right)
     else:
         # under the handguard at the game's support-hand target, palm toward the barrel
-        Rl = _hand_frame(w_fwd, -(R @ weapon.lpalm))
+        Rl = _support_frame(R, weapon)
     lh = apply(M_w, weapon.lwrist)
     p.ik("RightArm", "RightForeArm", "RightHand", rh, pole=pole_r)
     p.ik("LeftArm", "LeftForeArm", "LeftHand", lh, pole=pole_l)
     p.orient("RightHand", Rr)
     p.orient("LeftHand", Rl)
     p.curl("Right", GRIP)
-    p.curl("Left", GRIP if weapon.kind == "pistol" else SUPPORT)
+    p.curl("Left", GRIP if weapon.kind == "pistol" else WRAP)
     return p.solve(root), M_w

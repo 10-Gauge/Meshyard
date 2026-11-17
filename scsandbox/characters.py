@@ -412,7 +412,7 @@ def build(install: Install, settings: dict, con, body: str, picks: dict, head: s
     return out, name
 
 
-POSE_VERSION = 20  # bump when pose definitions change, so cached figures are rebuilt
+POSE_VERSION = 21  # bump when pose definitions change, so cached figures are rebuilt
 
 
 def figure_path(install: Install, name: str) -> Path:
