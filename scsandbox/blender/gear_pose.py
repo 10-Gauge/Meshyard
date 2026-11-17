@@ -112,6 +112,12 @@ try:
                 plan.append((n, "snap_first" if low.endswith("deploy") else "snap_last"))
             elif FLIGHT_WINGS.search(low):
                 plan.append((n, "snap_last"))
+        if any(FLIGHT_WINGS.search(n.lower()) for n in names):
+            # the Stingray's deployed mode also brings its nose cannons out
+            for n in names:
+                m = re.search(r"cannons?_(deploy|retract)$", n.lower())
+                if m:
+                    plan.append((n, "snap_last" if m.group(1) == "deploy" else "snap_first"))
     elif kind == "vtol":
         # thrusters that swing down for vertical flight: "nacelles_deploy" (Starlifter, Golem,
         # RAFT), "vtol_deploy" (Paladin, Hull B, Asgard, Fury), "nacelles_open" (Starlancer),
