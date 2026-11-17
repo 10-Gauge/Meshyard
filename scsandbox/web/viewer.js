@@ -146,6 +146,8 @@ export function createViewer(el, { onMessage } = {}) {
       peg = null;
       const r = Math.max(size.x, size.y, size.z) || 1;
       current.position.sub(new THREE.Vector3(center.x, box.min.y, center.z));
+      restPos = current.position.clone();
+      lastPeg = null;
       const step = Math.pow(10, Math.floor(Math.log10(r)));
       setGrid(Math.ceil(r * 1.5 / step) * step, Math.ceil(r * 1.5 / step));
       camera.position.set(r * 1.1, r * 0.7, r * 1.3);
@@ -169,12 +171,28 @@ export function createViewer(el, { onMessage } = {}) {
   }
 
   // Where the print's stand peg will go (from /api/print/peg): the socket drawn in
-  // orange through the hull, the post down to the floor in see-through blue.
-  let peg = null, floorY = 0, pendingPeg = null;
+  // orange through the hull, the post down to the floor in see-through blue. In the
+  // stand view the whole stand is drawn as the export builds it (base, post, at the
+  // stand height) and the ship is turned onto it, display angle and all.
+  let peg = null, floorY = 0, pendingPeg = null, lastPeg = null, standView = false, restPos = null;
+  const STAND_COLOR = 0x5d636b;
+  function setStandView(on) {
+    standView = !!on;
+    if (!loading) setPeg(lastPeg);
+  }
+  function unturn() {
+    if (!current || !restPos) return;
+    current.quaternion.identity();
+    current.position.copy(restPos);
+    current.updateMatrixWorld(true);
+  }
   function setPeg(p) {
     if (loading) { pendingPeg = p; return; }  // drawn once the model is in
     if (peg) { peg.removeFromParent(); peg = null; }
+    lastPeg = p;
+    unturn();
     if (!p || !p.top || !current) { redraw(); return; }
+    if (standView && p.base && p.post_bottom) { drawStand(p); return; }
     peg = new THREE.Group();
     const top = new THREE.Vector3(...p.top);
     const up = new THREE.Vector3(...(p.down || [0, -1, 0])).negate().normalize();
@@ -203,12 +221,58 @@ export function createViewer(el, { onMessage } = {}) {
     redraw();
   }
 
+  // The ship on its stand: base and post (model coordinates, so they turn with it), then
+  // the ship turned so the post stands upright and the base sits on the floor.
+  function drawStand(p) {
+    peg = new THREE.Group();
+    const v = (a) => new THREE.Vector3(...a);
+    const top = v(p.top), bottom = v(p.post_bottom);
+    const down = v(p.down).normalize(), up = down.clone().negate();
+    const along = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
+    const mat = new THREE.MeshStandardMaterial({ color: STAND_COLOR, roughness: 0.55, metalness: 0.1 });
+    const postH = top.distanceTo(bottom);
+    if (postH > 0) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(p.post_r, p.post_r, postH, 40), mat);
+      post.quaternion.copy(along);
+      post.position.copy(top).add(bottom).multiplyScalar(0.5);
+      peg.add(post);
+    }
+    let baseBottom;
+    if (p.base.shape === "rect") {
+      const c = p.base.corners.map(v);            // 4 bottom corners, then 4 top
+      const sx = c[1].clone().sub(c[0]), sy = c[3].clone().sub(c[0]), sz = c[4].clone().sub(c[0]);
+      const box = new THREE.Mesh(new THREE.BoxGeometry(sx.length(), sz.length(), sy.length()), mat);
+      const basis = new THREE.Matrix4().makeBasis(sx.clone().normalize(), sz.clone().normalize(), sy.clone().normalize());
+      box.quaternion.setFromRotationMatrix(basis);
+      box.position.copy(c[0]).add(c[6]).multiplyScalar(0.5);
+      peg.add(box);
+      baseBottom = c[0].clone().add(c[2]).multiplyScalar(0.5);
+    } else {
+      const b = v(p.base.bottom), t = v(p.base.top);
+      const disc = new THREE.Mesh(new THREE.CylinderGeometry(p.base.r, p.base.r * 1.02, b.distanceTo(t), 64), mat);
+      disc.quaternion.copy(along);
+      disc.position.copy(b).add(t).multiplyScalar(0.5);
+      peg.add(disc);
+      baseBottom = b;
+    }
+    peg.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    current.add(peg);
+    // turn the ship so "down" in print space is down on screen, base centre on the floor
+    current.quaternion.setFromUnitVectors(down, new THREE.Vector3(0, -1, 0));
+    current.position.set(0, 0, 0).sub(baseBottom.clone().applyQuaternion(current.quaternion));
+    current.updateMatrixWorld(true);
+    controls.target.copy(tightBox(current).getCenter(new THREE.Vector3()));
+    controls.update();
+    renderer.shadowMap.needsUpdate = true;
+    redraw();
+  }
+
   function setTheme(dark) {
     gridColors = dark ? [0x8a8f98, 0x4a4f58] : [0x9aa0a8, 0xcfd3d8];
     setGrid(gridSize, gridDivs);
   }
 
-  renderer.domElement.addEventListener("dblclick", resetView);  return { show, clear, resetView, setTheme, message, setPeg, get loaded() { return !!current; } };
+  renderer.domElement.addEventListener("dblclick", resetView);  return { show, clear, resetView, setTheme, message, setPeg, setStandView, get loaded() { return !!current; } };
 }
 
 const MERGE_MIN_MESHES = 300;

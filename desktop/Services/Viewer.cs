@@ -51,6 +51,9 @@ public sealed class Viewer
     public Task Say(string text, bool corner = false) => Call("message", text, corner);
     public Task ResetView() => Call("reset");
     /// <summary>Draw where the print's stand peg goes (an /api/print/peg answer), or nothing.</summary>
+    /// <summary>Show the ship on its stand (the last peg answer's stand), or as usual.</summary>
+    public Task StandView(bool on) => Call("standView", on);
+
     public async Task Peg(JsonNode? peg)
     {
         await _ready.Task;

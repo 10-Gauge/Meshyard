@@ -385,12 +385,30 @@ def peg_preview(glb: Path, opts: PrintOptions, log=print) -> dict:
     A_print = (moved[1:] - moved[0]).T          # print-space edges
     A_model = (probe[1:] - probe[0]).T          # model-space edges
     to_model = A_model @ np.linalg.inv(A_print)
-    top = probe[0] + to_model @ (np.array([spec.x, spec.y, spec.top_z]) - moved[0])
+    def model(p):
+        return probe[0] + to_model @ (np.asarray(p, float) - moved[0])
+
+    def r4(v):
+        return [round(float(x), 4) for x in v]
+    top = model([spec.x, spec.y, spec.top_z])
     mm = float(np.linalg.norm(to_model @ np.array([1.0, 0, 0])))  # meters per print mm
-    return {"stand": opts.stand, "top": [round(float(v), 4) for v in top],
+    # the whole stand as the export builds it (base, post up to the model), in the same
+    # model coordinates: the post runs straight down in print space, so on a tilted
+    # model it leans in the model's own frame
+    post_bottom_z = spec.top_z - opts.stand_height_mm
+    base_bottom_z = post_bottom_z - spec.base_t
+    if spec.shape == "rect" or opts.stand_shape == "rect":
+        x0, x1, y0, y1 = _base_box(spec)
+        base = {"shape": "rect", "corners": [r4(model([x, y, z])) for z in (base_bottom_z, post_bottom_z)
+                                             for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]}
+    else:
+        base = {"shape": "round", "bottom": r4(model([spec.x, spec.y, base_bottom_z])),
+                "top": r4(model([spec.x, spec.y, post_bottom_z])), "r": round(spec.base_r * mm, 4)}
+    return {"stand": opts.stand, "top": r4(top),
             "peg_r": round(spec.peg_r * mm, 4), "post_r": round(spec.post_r * mm, 4),
             "depth": round(spec.peg_depth * mm, 4),
-            "down": [round(float(v), 4) for v in to_model @ np.array([0, 0, -1.0]) / mm]}
+            "down": r4(to_model @ np.array([0, 0, -1.0]) / mm),
+            "post_bottom": r4(model([spec.x, spec.y, post_bottom_z])), "base": base}
 
 
 def measure(glb: Path, exclude: list[str]) -> dict:

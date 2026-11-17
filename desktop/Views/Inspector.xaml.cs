@@ -354,6 +354,11 @@ public sealed partial class Inspector : UserControl
 
     void Peg_Changed(NumberBox sender, NumberBoxValueChangedEventArgs args) => RefreshPeg();
 
+    void StandView_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_state != null) _ = _state.Viewer.StandView(StandViewSwitch.IsOn);
+    }
+
     // Where the stand's peg will go with the current settings, drawn in the viewer so the
     // Peg forward / Peg right offsets can be set before exporting. Asked again (after a
     // short pause) whenever a setting that moves it changes.

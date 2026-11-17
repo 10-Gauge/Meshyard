@@ -184,7 +184,7 @@
                             </Grid.RowDefinitions>
                             <ComboBox x:Name="ShapeBox" Header="Base" HorizontalAlignment="Stretch" SelectionChanged="Stand_Changed" />
                             <NumberBox x:Name="StandHBox" Grid.Column="1" Header="Stand height (mm)" Minimum="5" Maximum="300" SmallChange="5"
-                                       SpinButtonPlacementMode="Compact" />
+                                       SpinButtonPlacementMode="Compact" ValueChanged="Peg_Changed" />
                             <NumberBox x:Name="TiltBox" Grid.Row="1" Header="Display angle (°)" Minimum="-45" Maximum="45" SmallChange="5"
                                        SpinButtonPlacementMode="Compact" ValueChanged="Peg_Changed"
                                        ToolTipService.ToolTip="Tilts the nose up (negative tilts it down)" />
@@ -198,6 +198,9 @@
                                        SpinButtonPlacementMode="Compact" ValueChanged="Peg_Changed"
                                        ToolTipService.ToolTip="Moves the stand's peg to the right (negative: to the left)" />
                         </Grid>
+                        <ToggleSwitch x:Name="StandViewSwitch" Header="Show on stand" OnContent="On" OffContent="Off"
+                                      Toggled="StandView_Toggled"
+                                      ToolTipService.ToolTip="Shows the ship in the viewer on the stand these settings make: base, post, height and display angle" />
                         <TextBlock x:Name="PegNote" Style="{StaticResource Secondary}" TextWrapping="Wrap" />
                         <TextBox x:Name="PlateText" Header="Name plate text" MaxLength="60" PlaceholderText="Ship name" />
                         <TextBox x:Name="PlateText2" Header="Second line (optional, smaller)" MaxLength="60"

@@ -299,7 +299,9 @@ function updateMinMm() {
 }
 for (const id of ["p-nozzle", "p-minn", "p-stand", "p-standshape"]) $(id).addEventListener("input", updateMinMm);
 // settings that move the peg: show where it goes now
-for (const id of ["p-stand", "p-standfwd", "p-standside", "p-size", "p-tilt"]) $(id).addEventListener("input", () => refreshPeg(600));
+for (const id of ["p-stand", "p-standfwd", "p-standside", "p-size", "p-tilt", "p-standh", "p-standshape", "p-standtext", "p-standtext2"])
+  $(id).addEventListener("input", () => refreshPeg(600));
+$("p-standview").addEventListener("change", () => viewer.setStandView($("p-standview").checked));
 
 function printOptions() {
   const o = { mode: $("p-mode").value, format: $("p-format").value, stand: $("p-stand").value, thicken: $("p-thicken").checked,
