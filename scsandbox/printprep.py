@@ -1148,7 +1148,7 @@ TEXT_RELIEF_MM = 0.8
 
 
 def _bevel_run(s: StandSpec) -> float:
-    """Horizontal depth of the bevelled front face."""
+    """Horizontal depth of the beveled front face."""
     return (s.base_t - PLATE_FOOT) / math.tan(math.radians(PLATE_ANGLE))
 
 

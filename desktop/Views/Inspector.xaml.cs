@@ -416,7 +416,8 @@ public sealed partial class Inspector : UserControl
         string pitch = inc == 0 ? "level" : $"nose {(inc > 0 ? "up" : "down")} {Math.Abs(inc):0}°";
         string bank = tilt == 0 ? "wings level"
             : $"{(tilt > 0 ? "right wing down (toward you)" : "left wing down (away from you)")} {Math.Abs(tilt):0}°";
-        return $"Seen from the stand's front (the light edge): nose to the right, {pitch}, {bank}.";
+        return $"Seen from the stand's front (the light edge): nose to the right, {pitch}, {bank}. " +
+               "The stand in the viewer is a simple stand-in: the exported stand adds the name plate, lettering, logo and beveled front.";
     }
 
     async void RefreshPeg(int delayMs = 600)

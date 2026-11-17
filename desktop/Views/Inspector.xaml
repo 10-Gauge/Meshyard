@@ -210,7 +210,7 @@
                         </Grid>
                         <ToggleSwitch x:Name="StandViewSwitch" Header="Show on stand" OnContent="On" OffContent="Off"
                                       Toggled="StandView_Toggled"
-                                      ToolTipService.ToolTip="Shows the ship in the viewer on the stand these settings make, seen from the stand's front: base, post, height, incline and tilt" />
+                                      ToolTipService.ToolTip="Shows the ship in the viewer on the stand these settings make, seen from the stand's front: base, post, height, incline and tilt. The viewer's stand is a simple stand-in: the exported one adds the name plate, lettering, logo and beveled front." />
                         <TextBlock x:Name="PegNote" Style="{StaticResource Secondary}" TextWrapping="Wrap" />
                         <TextBox x:Name="PlateText" Header="Name plate text" MaxLength="60" PlaceholderText="Ship name" />
                         <TextBox x:Name="PlateText2" Header="Second line (optional, smaller)" MaxLength="60"

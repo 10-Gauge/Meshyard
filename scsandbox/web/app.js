@@ -615,5 +615,6 @@ function standLine(r) {
   const inc = +r.incline || 0, tilt = +r.tilt || 0;
   return "Seen from the stand's front (the light edge): nose to the right, " +
     (inc ? `nose ${inc > 0 ? "up" : "down"} ${deg(inc)}°` : "level") + ", " +
-    (tilt ? `${tilt > 0 ? "right wing down (toward you)" : "left wing down (away from you)"} ${deg(tilt)}°` : "wings level") + ".";
+    (tilt ? `${tilt > 0 ? "right wing down (toward you)" : "left wing down (away from you)"} ${deg(tilt)}°` : "wings level") + ". " +
+    "The stand in the viewer is a simple stand-in: the exported stand adds the name plate, lettering, logo and beveled front.";
 }
