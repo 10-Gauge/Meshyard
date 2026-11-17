@@ -20,13 +20,15 @@ from .installs import Install
 
 VARIANTS = {
     # variant: (command, lod)
-    "preview": ("export_entity_preview", "2"),
+    "preview": ("export_entity_preview", "1"),
     "full": ("export_entity", "0"),
     "print": ("export_entity_print", "0"),
 }
 # Cache file tag per variant; bump when a variant's export settings change.
 FILE_TAG = {"print": "print-m",     # print-m: exported with material names
-            "preview": "preview-l"}  # preview-l: light (small textures, no lights)
+            "preview": "preview-d"}  # preview-d: LOD 1, eighth-size textures, no lights
+# Past this the viewer model is exported again lighter (LOD 2, sixteenth-size textures).
+PREVIEW_MAX_BYTES = 250 * 2**20
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 
@@ -66,6 +68,11 @@ def glb_for(install: Install, settings: dict, asset: dict, variant: str = "previ
             command, lod = VARIANTS[variant]
             try:
                 tools.run(settings, command, install, name=asset["record"], out=str(out), lod=lod)
+                if variant == "preview" and out.exists() and out.stat().st_size > PREVIEW_MAX_BYTES:
+                    # capital ships (Idris, Javelin) at this detail are too heavy for the
+                    # viewer: use the distance mesh and smaller textures ("Full detail" has all)
+                    log("large ship: using a lighter viewer model")
+                    tools.run(settings, "export_entity_preview_light", install, name=asset["record"], out=str(out), lod="2")
                 if out.exists() and "fps_weapons" in (asset.get("subcategory") or ""):
                     complete_weapon(out, install, settings, asset, log)
                 if out.exists():
