@@ -11,6 +11,10 @@ public partial class App : Application
     {
         // WebView2 keeps its profile with the toolkit's own data, not beside the exe.
         Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", Path.Combine(Paths.Home, "webview2"));
+        // On PCs with a second, built-in graphics chip, Windows can hand the viewer to that
+        // one instead of the real card: ask for the fast one.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS")))
+            Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--force_high_performance_gpu");
         InitializeComponent();
         UnhandledException += (_, e) =>
         {

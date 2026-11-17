@@ -6,13 +6,16 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 export function createViewer(el, { onMessage } = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
+  // past 2x a 4K screen pays four times the pixels for no visible gain
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   // film-style tone mapping: bright panels roll off instead of clipping to white
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.85;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // nothing in the scene moves: work the shadows out once per model, not every frame
+  renderer.shadowMap.autoUpdate = false;
   el.prepend(renderer.domElement);
   const scene = new THREE.Scene();
   // a soft studio around the model for reflections: without one, metal and glass have
@@ -48,27 +51,48 @@ export function createViewer(el, { onMessage } = {}) {
     camera.aspect = w / Math.max(h, 1);
     camera.updateProjectionMatrix();
   }
-  new ResizeObserver(resize).observe(el);
-  (function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+  new ResizeObserver(() => { resize(); redraw(); }).observe(el);
+  // Draw only when something changed (the camera moving, a model arriving): a still
+  // view costs nothing, and the app stays responsive while it sits there.
+  let dirty = true;
+  const redraw = () => { dirty = true; };
+  controls.addEventListener("change", redraw);
+  (function loop() {
+    requestAnimationFrame(loop);
+    if (controls.update()) dirty = true;  // still easing after a drag
+    if (!dirty) return;
+    dirty = false;
+    renderer.render(scene, camera);
+  })();
 
-  const message = (text, corner = false) => onMessage && onMessage(text, corner);
+  // Which graphics card draws the view. Edge and WebView2 drop to software drawing when
+  // they distrust the driver, which makes the viewer crawl on any card: say so under the
+  // model's size.
+  const gpu = gpuName(renderer);
+  const gpuNote = /swiftshader|basic render|llvmpipe|software/i.test(gpu)
+    ? `\nDrawing without the graphics card (${gpu}), so the view will be slow. Updating the graphics driver usually fixes this.`
+    : "";
+  const message = (text, corner = false) => onMessage && onMessage(corner ? text + gpuNote : text, corner);
 
   function setGrid(size, divs) {
     scene.remove(grid);
     gridSize = size; gridDivs = divs;
     grid = new THREE.GridHelper(size, divs, ...gridColors);
     scene.add(grid);
+    redraw();
   }
 
   function clear() {
     loadSeq++;
     if (current) { scene.remove(current); current = null; }
+    redraw();
   }
 
   function resetView() {
     if (!home) return;
     camera.position.copy(home.pos);
     controls.target.copy(home.target);
+    redraw();
   }
 
   function show(url) {
@@ -95,6 +119,8 @@ export function createViewer(el, { onMessage } = {}) {
         for (const m of o.isMesh ? [].concat(o.material) : []) {
           if (m.vertexColors) { m.vertexColors = false; m.needsUpdate = true; }
           if (m.side !== THREE.DoubleSide) { m.side = THREE.DoubleSide; m.needsUpdate = true; }
+          // see-through two-sided parts are otherwise drawn twice (back faces, then front)
+          if (m.transparent) m.forceSinglePass = true;
           tune(m);
           // a map on the second uv set of a part that has none fails to compile
           const g = o.geometry;
@@ -129,6 +155,8 @@ export function createViewer(el, { onMessage } = {}) {
       sun.castShadow = true;
       floor.scale.set(r * 3, r * 3, 1);
       floor.visible = true;
+      renderer.shadowMap.needsUpdate = true;
+      redraw();
       message(`${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)} m`, true);
     }, (p) => { if (seq === loadSeq && p.total) message(`Downloading model… ${Math.round(100 * p.loaded / p.total)}%`); },
     (err) => { if (seq === loadSeq) message("Could not load model: " + (err.message || err)); });
@@ -143,6 +171,13 @@ export function createViewer(el, { onMessage } = {}) {
 }
 
 const MERGE_MIN_MESHES = 300;
+
+function gpuName(renderer) {
+  try {
+    const gl = renderer.getContext(), ext = gl.getExtension("WEBGL_debug_renderer_info");
+    return String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+  } catch { return ""; }
+}
 
 // One mesh per material, in world space. The game's parts share huge vertex buffers
 // (see tightGeometryBounds), so copy only the vertices each part's triangles use.
