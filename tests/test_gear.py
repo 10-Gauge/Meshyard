@@ -117,9 +117,9 @@ def test_posed_glb_stacks_gear_and_weapons_and_names_the_missing_pose(tmp_path, 
             return {"blender": {"anchors": wpose["blender"]["anchors"], "objects": {}}}
         if kind in ("weapons_in", "vtol", "flight"):
             raise gear.NoPose(f"this ship has no {gear.KINDS[kind][2]} animation")
-        if kind == "landed":  # this ship looks the same on the ground
-            (tmp_path / "X.landed.json").write_text(json.dumps({"version": gear.POSE_VERSION, "blender": {"objects": {}}}))
-            raise gear.NoPose("this ship has no landed shape animation")
+        if kind in ("landed", "closed"):  # this ship looks the same on the ground, doors shut
+            (tmp_path / f"X.{kind}.json").write_text(json.dumps({"version": gear.POSE_VERSION, "blender": {"objects": {}}}))
+            raise gear.NoPose(f"this ship has no {kind} animation")
         return wpose
 
     monkeypatch.setattr(gear, "pose_for", fake_pose)
@@ -127,7 +127,7 @@ def test_posed_glb_stacks_gear_and_weapons_and_names_the_missing_pose(tmp_path, 
                         (__import__("shutil").copyfile(g, o), 1)[1])
     out = gear.posed_glb(None, {}, {"record": "X"}, "preview", gear_up=True, weapons="out", log=lambda *_: None)
     # raising the gear also works out the landed shape, once
-    assert out.name == "ship.preview-l.gearup.wout.glb" and calls == ["landed", "gear", "weapons_out"]
+    assert out.name == "ship.preview-l.gearup.wout.glb" and calls == ["landed", "closed", "gear", "weapons_out"]
     calls.clear()
     assert gear.posed_glb(None, {}, {"record": "X"}, "preview", gear_up=True, weapons="out") == out  # cached
     assert "landed" not in calls   # the landed shape is known: not worked out again
