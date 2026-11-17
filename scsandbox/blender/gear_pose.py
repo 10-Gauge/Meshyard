@@ -66,6 +66,11 @@ try:
         for a in listed:
             frags = [fr for fr in a.get("fragments") or []]
             kinds = [re.sub(r"[^a-z]", "", (fr.get("fragment") or "").lower()) for fr in frags]
+            # door, ramp and canopy clips listed only here play by name too (the Railen's
+            # cargo door)
+            if a.get("name") and a["name"] not in names and \
+                    re.search(r"(?i)(door|airlock|hatch|ramp|canopy|cockpit)\w*_(close|open|deploy|retract)", a["name"]):
+                names.append(a["name"])
             if not a.get("name") or "landinggear" not in kinds:
                 continue
             gear_clips.add(a["name"])
@@ -130,10 +135,18 @@ try:
     elif kind == "closed":
         # doors and airlocks the export leaves open (the Gatac Railen's rear airlock):
         # close them so the hull has no hole
+        # and the Railen's "exterior/gama_railen_cargo_door_close.caf", the MPUV's canopy
+        # hatches ("left_hatch_deploy"), ramps and canopies left open. Not the landing
+        # gear's own doors (they follow the gear) or lockers and seats inside.
+        shut = re.compile(r"(?:^|_|:)(?:doors?|airlock|hatch|ramp|canopy|cockpit)(?:_(?:left|right|l|r|\d+))?"
+                          r"_(close|open|deploy|retract)(?:_(?:left|right|l|r|\d+))?$")
+        inside = re.compile(r"(?i)/interior/|locker|storage|inventory|seat|dash|fuel|component|elevator|shutter|cooler|relay|batter"
+                            r"|landing|gear|(^|[_/:])lg_")
         for n in names:
-            m = re.search(r"(?:^|_|:)(?:doors?|airlock|hatch)_(close|open)$", n.lower())
-            if m:
-                plan.append((n, "snap_last" if m.group(1) == "close" else "snap_first"))
+            stem = re.sub(r"\.caf$", "", n.lower())
+            m = shut.search(stem)
+            if m and not inside.search(n) and not is_gear_clip(n):
+                plan.append((n, "snap_last" if m.group(1) in ("close", "retract") else "snap_first"))
     elif kind == "flight":
         # flight mode: the Stingray opens its flaps ("flap_deploy", "fap_retract") and draws
         # its wings in; ships exported in their landed shape spread their wings: the
