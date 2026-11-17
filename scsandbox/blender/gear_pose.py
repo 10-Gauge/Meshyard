@@ -64,8 +64,9 @@ try:
         pass
     result["available"] = names
     plan = []
-    # "landing_gear_retract", "lg_extend", and the Gatac Railen's "landing_deploy"
-    gear = re.compile(r"(?i)(landing_?gears?|(^|_)lg_|gear|(^|_|:)landing_(deploy|retract|extend))")
+    # "landing_gear_retract", "lg_extend", the Gatac Railen's "landing_deploy" and the
+    # Reclaimer's ".../reclaimer/lg_arm_deploy_main_left.caf"
+    gear = re.compile(r"(?i)(landing_?gears?|(^|[_/:])lg_|gear|(^|_|:)landing_(deploy|retract|extend))")
 
     def gear_plan(up):
         out = []
@@ -171,23 +172,31 @@ try:
         po._restore_bind_pose(root)
 
     def most_moved(clips):
-        best = 0
+        """(most parts one clip moves, how far all the clips lower their parts, summed)"""
+        best, drop = 0, 0.0
         for n, mode in clips:
             reset()
             try:
                 po.apply_animation_mode_to_package_root(bpy.context, root, n, mode)
-                best = max(best, len(moved_now()))
+                parts = moved_now()
+                best = max(best, len(parts))
+                if parts:
+                    dz = [bind[k].translation.z - bpy.data.objects[k].matrix_world.translation.z for k in parts]
+                    drop += sum(dz)
                 po.apply_animation_mode_to_package_root(bpy.context, root, n, "none")
             except Exception:
                 pass
         reset()
-        return best
+        return best, drop
 
     if kind == "landed":
-        # Most ships are exported gear down. A few (the Stingray) come gear up: their
-        # landed shape puts the gear down as well.
-        up, down = most_moved(gear_plan(True)), most_moved(gear_plan(False))
-        if down > 20 and up * 4 < down:
+        # Most ships are exported gear down. A few (the Stingray, the Reclaimer) come gear
+        # up: their landed shape puts the gear down as well. Told apart by part counts, or
+        # by how far the gear drops: the Reclaimer's clips start from a rest pose that isn't
+        # the export's, so both ends move its legs, but the down end lowers them much more.
+        (up, up_drop), (down, down_drop) = most_moved(gear_plan(True)), most_moved(gear_plan(False))
+        result["gear_check"] = [up, round(up_drop, 1), down, round(down_drop, 1)]
+        if down > 20 and (up * 4 < down or down_drop > max(20.0, 1.3 * up_drop)):
             plan += gear_plan(False)
             result["gear_down"] = True
 

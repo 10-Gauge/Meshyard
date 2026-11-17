@@ -31,7 +31,7 @@ import numpy as np
 from . import blendertools, models, tools
 from .installs import Install
 
-POSE_VERSION = 7
+POSE_VERSION = 9
 # pose kind -> (cache name, file suffix, what it is in messages)
 KINDS = {"gear": ("gearup", "gearup", "landing gear"),
          "weapons_out": ("weapons_out", "wout", "deployable weapons"),
@@ -296,6 +296,15 @@ def has_shape(install: Install, asset: dict, kind: str) -> bool:
     return data.get("version") == POSE_VERSION and bool((data.get("blender") or {}).get("objects"))
 
 
+def exported_gear_up(install: Install, asset: dict) -> bool:
+    """Whether the ship's export has its gear up (its landed shape puts the gear down)."""
+    try:
+        data = json.loads(_pose_path(install, asset, "landed").read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+    return data.get("version") == POSE_VERSION and bool((data.get("blender") or {}).get("gear_down"))
+
+
 def landed_unknown(install: Install, asset: dict) -> bool:
     """True until the ship's landed shape has been worked out (with this POSE_VERSION)."""
     try:
@@ -336,6 +345,9 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
                 pass
     landed = not gear_up and has_landed_shape(install, asset)
     closed = has_shape(install, asset, "closed")
+    # a ship exported gear up already shows its gear up: the Reclaimer's clips start from
+    # a rest pose with the legs half down, so posing them "up" would lower them
+    gear_up = gear_up and not exported_gear_up(install, asset)
     kinds = (["closed"] if closed else []) + (["gear"] if gear_up else []) + (["landed"] if landed else []) \
         + ([f"weapons_{weapons}"] if weapons in ("out", "in") else []) + (["vtol"] if vtol else []) + (["flight"] if flight else [])
     moved_before: dict = {}   # Blender object -> where an earlier pose in the stack left it
@@ -358,6 +370,8 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
                     tmp.unlink(missing_ok=True)
                     raise NoPose(f"none of the {KINDS[kind][2]} parts were found in the model")
             except (NoPose, tools.ToolError) as e:
+                if kind == "gear" and exported_gear_up(install, asset):
+                    continue  # the export already has the gear up (Reclaimer, Stingray)
                 if kind in ("landed", "closed"):  # extras: the plain model will do
                     log(f"landed shape skipped: {e}")
                     continue
