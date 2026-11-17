@@ -22,7 +22,9 @@ part name, poses stacked: <stem>.gearup.glb, <stem>.wout.glb, <stem>.gearup.win.
 from __future__ import annotations
 
 import json
+import os
 import re
+import threading
 import subprocess
 from pathlib import Path
 
@@ -373,36 +375,38 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
     moved_before: dict = {}   # Blender object -> where an earlier pose in the stack left it
     for kind in kinds:
         out = glb.with_name(glb.name[:-4] + f".{KINDS[kind][1]}.glb")
-        if out.exists() and not _pose_current(install, asset, kind):
-            out.unlink(missing_ok=True)  # worked out by an older version of the pose rules
-        try:
-            if out.exists() and _pose_path(install, asset, kind).stat().st_mtime > out.stat().st_mtime:
-                out.unlink(missing_ok=True)  # the pose was worked out again since
-        except (OSError, AttributeError, TypeError):
-            pass
         pose = None
-        if not (out.exists() and out.stat().st_mtime >= glb.stat().st_mtime):
+        # one writer per file: the viewer, the peg preview and a print can ask for the
+        # same pose at once, and Windows won't replace a file another job has open
+        with models._lock(str(out)):
             try:
-                pose = pose_for(install, settings, asset, log, kind=kind)
-                tmp = out.with_name(out.name + ".part")
-                n = apply_pose(glb, tmp, pose, log, hide_gear=kind == "gear", skip=moved_before)
-                if n == 0:
-                    tmp.unlink(missing_ok=True)
-                    raise NoPose(f"none of the {KINDS[kind][2]} parts were found in the model")
-            except (NoPose, tools.ToolError) as e:
-                if kind == "gear" and exported_gear_up(install, asset):
-                    continue  # the export already has the gear up (Reclaimer, Stingray)
-                if kind in ("landed", "closed"):  # extras: the plain model will do
-                    log(f"landed shape skipped: {e}")
-                    continue
-                if isinstance(e, NoPose):
-                    e.kind = kind
-                raise
-            tmp.replace(out)
-            try:  # a borrowed clip can leave a gear piece hanging off the hull
-                models.fix_floating_parts(out, log)
-            except Exception as e:  # noqa: BLE001
-                log(f"floating parts check skipped: {e}")
+                if out.exists() and (not _pose_current(install, asset, kind)
+                                     or _pose_path(install, asset, kind).stat().st_mtime > out.stat().st_mtime):
+                    out.unlink(missing_ok=True)  # worked out by older pose rules, or again since
+            except (OSError, AttributeError, TypeError):
+                pass
+            if not (out.exists() and out.stat().st_mtime >= glb.stat().st_mtime):
+                try:
+                    pose = pose_for(install, settings, asset, log, kind=kind)
+                    tmp = out.with_name(out.name + f".{os.getpid()}.{threading.get_ident()}.part")
+                    n = apply_pose(glb, tmp, pose, log, hide_gear=kind == "gear", skip=moved_before)
+                    if n == 0:
+                        tmp.unlink(missing_ok=True)
+                        raise NoPose(f"none of the {KINDS[kind][2]} parts were found in the model")
+                except (NoPose, tools.ToolError) as e:
+                    if kind == "gear" and exported_gear_up(install, asset):
+                        continue  # the export already has the gear up (Reclaimer, Stingray)
+                    if kind in ("landed", "closed"):  # extras: the plain model will do
+                        log(f"landed shape skipped: {e}")
+                        continue
+                    if isinstance(e, NoPose):
+                        e.kind = kind
+                    raise
+                models.replace_file(tmp, out)
+                try:  # a borrowed clip can leave a gear piece hanging off the hull
+                    models.fix_floating_parts(out, log)
+                except Exception as e:  # noqa: BLE001
+                    log(f"floating parts check skipped: {e}")
         try:
             pose = pose or pose_for(install, settings, asset, lambda *_: None, kind=kind)
             for name, mv in (pose["blender"].get("objects") or {}).items():

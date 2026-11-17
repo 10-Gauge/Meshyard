@@ -916,7 +916,21 @@ def _write_glb(path: Path, doc: dict, bin_: bytes, version: int = 2) -> None:
         w.write(body)
         w.write(struct.pack("<II", len(bin_), 0x004E4942))
         w.write(bin_)
-    tmp.replace(path)
+    replace_file(tmp, path)
+
+
+def replace_file(src: Path, dst: Path, tries: int = 20) -> None:
+    """src.replace(dst), retried for a few seconds: on Windows the swap fails while
+    another job (the viewer download, a print) still has dst open."""
+    import time
+    for i in range(tries):
+        try:
+            src.replace(dst)
+            return
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(0.25)
 
 
 def graft_part(doc: dict, bin_: bytes, part: dict, part_bin: bytes, material: int) -> tuple[bytes, dict]:

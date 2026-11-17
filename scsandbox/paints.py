@@ -366,12 +366,13 @@ def painted_glb(install: Install, settings: dict, asset: dict, glb: Path, paint:
     if not old or not new:
         raise ValueError(f"couldn't read the colors of {paint}")
     out = glb.with_name(glb.name[:-4] + f".{models._safe(paint).lower()}.l{LIVERY_VERSION}.glb")
-    if out.exists() and out.stat().st_mtime >= glb.stat().st_mtime:
-        return out
     pkg = paint_package(install, settings, asset, log)
-    sources = livery_sources(pkg, asset["record"], paint) if pkg else None
-    doc, bin_, version = models._read_glb(glb)
-    bin_, n = repaint(doc, bin_, old, new, sources, pkg.parent.parent if pkg else None)
-    models._write_glb(out, doc, bin_, version)
+    with models._lock(str(out)):   # the viewer and a print may paint the same file at once
+        if out.exists() and out.stat().st_mtime >= glb.stat().st_mtime:
+            return out
+        sources = livery_sources(pkg, asset["record"], paint) if pkg else None
+        doc, bin_, version = models._read_glb(glb)
+        bin_, n = repaint(doc, bin_, old, new, sources, pkg.parent.parent if pkg else None)
+        models._write_glb(out, doc, bin_, version)
     log(f"painted {n} material(s) in {paint}" + ("" if sources else " (colors only)"))
     return out
