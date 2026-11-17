@@ -31,7 +31,7 @@ import numpy as np
 from . import blendertools, models, tools
 from .installs import Install
 
-POSE_VERSION = 4
+POSE_VERSION = 5
 # pose kind -> (cache name, file suffix, what it is in messages)
 KINDS = {"gear": ("gearup", "gearup", "landing gear"),
          "weapons_out": ("weapons_out", "wout", "deployable weapons"),
@@ -149,7 +149,7 @@ def _fit(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
     return A
 
 
-def apply_pose(glb: Path, out: Path, pose: dict, log=print, hide_gear: bool = True) -> int:
+def apply_pose(glb: Path, out: Path, pose: dict, log=print, hide_gear: bool = True, skip: dict | None = None) -> int:
     """Write a copy of glb with the pose's moves applied; returns parts moved. hide_gear:
     hide the gear legs (gear up; see below)."""
     import shutil
@@ -199,6 +199,8 @@ def apply_pose(glb: Path, out: Path, pose: dict, log=print, hide_gear: bool = Tr
 
         target = {}
         for name, mv in moved_b.items():
+            if skip and name in skip and np.allclose(skip[name], mv["posed"], atol=1e-3):
+                continue  # an earlier pose in the stack already put it there (the same clip)
             cands = by_key.get(_key(mv.get("source") or name)) or by_key.get(_key(name)) or []
             if not cands:
                 continue
@@ -314,6 +316,7 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
     landed = not gear_up and has_landed_shape(install, asset)
     kinds = (["gear"] if gear_up else []) + (["landed"] if landed else []) \
         + ([f"weapons_{weapons}"] if weapons in ("out", "in") else []) + (["vtol"] if vtol else []) + (["flight"] if flight else [])
+    moved_before: dict = {}   # Blender object -> where an earlier pose in the stack left it
     for kind in kinds:
         out = glb.with_name(glb.name[:-4] + f".{KINDS[kind][1]}.glb")
         if out.exists() and not _pose_current(install, asset, kind):
@@ -327,7 +330,7 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
             try:
                 pose = pose_for(install, settings, asset, log, kind=kind)
                 tmp = out.with_name(out.name + ".part")
-                n = apply_pose(glb, tmp, pose, log, hide_gear=kind == "gear")
+                n = apply_pose(glb, tmp, pose, log, hide_gear=kind == "gear", skip=moved_before)
                 if n == 0:
                     tmp.unlink(missing_ok=True)
                     raise NoPose(f"none of the {KINDS[kind][2]} parts were found in the model")
@@ -339,6 +342,11 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
                     e.kind = kind
                 raise
             tmp.replace(out)
+        try:
+            for name, mv in (pose_for(install, settings, asset, lambda *_: None, kind=kind)["blender"]["objects"]).items():
+                moved_before[name] = mv["posed"]
+        except (NoPose, tools.ToolError, KeyError, TypeError):
+            pass
         glb = out
     return glb
 
