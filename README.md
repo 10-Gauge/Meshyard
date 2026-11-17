@@ -1,22 +1,24 @@
-# Asset Lens
+# Meshyard
 
 Browse the vehicles, weapons, props and armor inside a game you own, look at them in 3D, and turn them into something you can print or open in Blender.
 
-Asset Lens reads the packed data files that CryEngine-family games ship with (`.p4k` and `.pak` archives holding `.cgf`, `.cga` and `.skin` models). Point it at a game's data file and it builds a searchable list of everything inside.
+Meshyard reads the packed data files that CryEngine games ship with (`.p4k` archives holding `.cgf`, `.cga` and `.skin` models). Point it at a game's data file, or let it find one for you, and it builds a searchable list of everything inside.
+
+![The Browse page: search results on the left, the 3D view in the middle, and the paint, landing gear, weapons, VTOL, flight mode and 3D print options on the right](docs/images/app-browse.png)
 
 It runs on your own PC against your own copy of the game. It only ever reads the game's data file. It doesn't talk to any game servers, and it never touches the game client or its anti-cheat. Anything you pull out of a game belongs to whoever made that game, so keep it for your own use and don't share the files around.
 
 ## Supported games
 
-| Game data | What works |
-|-----------|------------|
-| `Data.p4k` (LIVE, PTU and other channels) | Everything in this README: the full item list, paints, landing gear and other moving parts, characters, printing and export |
+| Game | Data file | What works |
+|------|-----------|------------|
+| CryEngine Games | `Data.p4k`, with one folder per build (LIVE, PTU and so on) | Everything in this README: the full item list, paints, landing gear and other moving parts, characters, printing and export |
 
-Pick which game to open from the game menu at the top of the window. The app looks for a supported game on its own when it starts, so most people never need to touch it.
+The game menu at the top of the window picks which kind of game to read. Next to it, **Find data files** looks through the usual game folders on every drive and lists every CryEngine data file it finds, so you can pick the one to browse or point it at one yourself. The app also runs that search on its own the first time it starts, so most people never need to touch it.
 
 ## Getting started
 
-Grab **[Asset-Lens.exe](https://github.com/10-Gauge/SC-Asset-Browser/releases/latest/download/Asset-Lens.exe)** and double-click it. There's no installer. It's around 200 MB, and the tools it uses to read game files come inside it.
+Grab **[Meshyard.exe](https://github.com/10-Gauge/Meshyard/releases/latest/download/Meshyard.exe)** and double-click it. There's no installer. It's around 200 MB, and the tools it uses to read game files come inside it.
 
 The one thing it doesn't bring along is [Blender](https://www.blender.org/download/). Browsing, previews, 3D printing and most exports work fine without it. You only need it for the landing gear, weapon, VTOL and flight mode switches, for FBX, USDZ and `.blend` export, and for the sandbox. It's free. If the app can't find Blender, it tells you on first launch and gives you a download link. After that a note stays at the top of the window, with a **Check again** button for once you've installed it.
 
@@ -27,7 +29,7 @@ Every time you open the app it checks GitHub for a newer version. If there is on
 The first launch takes a little longer than usual:
 
 1. It unpacks its tools into `%LOCALAPPDATA%\sc-sandbox\tools`. That takes a few seconds and only happens once per version.
-2. It finds your game (see [Finding your game](#finding-your-game) below). If it can't, click **Choose game data…** and point it at the game's data file, or the folder it sits in.
+2. It finds your game (see [Finding your game](#finding-your-game) below). If it can't, click **Find data files** at the top of the window. It lists every CryEngine data file it can find, and **Browse…** lets you pick one yourself.
 3. It reads the game's item database and builds a search index. Give it a few minutes. This happens once per patch, and after that searching is instant.
 
 ## Using it
@@ -43,6 +45,10 @@ If you have more than one build of a game installed (a live build and a test bui
 For vehicles there are four switches in the panel on the right:
 
 - **Landing gear** shows the vehicle with its gear up and the gear doors shut, taken from its own retract animation. The first time you do it for a vehicle it takes 10 to 30 seconds; after that it's instant. Some vehicles change shape on the ground, folding their wings or moving engines with their gear, and the app shows that shape with the gear down once you've raised the gear on that vehicle once.
+![A ship in the 3D view with its landing gear down, seen from the front](docs/images/gear-down.png)
+
+*A ship in its stock paint with the landing gear down.*
+
 - **Weapons** shows deployable guns out, like hidden cannon pods or folding missile racks. Vehicles with fixed guns just say so.
 - **VTOL mode** swings the thrusters down for vertical flight. Vehicles without one just say so.
 - **Flight mode** shows vehicles that fly in a different shape, with wings drawn in, spread out or stood upright.
@@ -60,6 +66,10 @@ Click **Export printable file** and you get a single watertight 3MF or STL that 
 - Thickens anything too thin to print, like antennas, gun barrels and fins. The default minimum is three nozzle widths. **Find thin parts…** lists them at your chosen size, in case you'd rather make one thicker or leave it off and use brass rod instead.
 - Places it on the bed, Z up.
 
+![A ship exported at 300 mm with a separate peg stand and name plate, opened in 3D Builder](docs/images/print-export.png)
+
+*A ship exported at 300 mm, with the peg stand and a name plate showing its maker's logo.*
+
 **Detail** is the mesh resolution: 0.2 mm is a good default, 0.1 mm suits resin, and 0.3 to 0.4 mm is fine for a quick FDM print. Very large models keep up to 4 million triangles so panel lines and edges stay sharp.
 
 **Paint colors** (3MF only) paints the print for a multi-color printer. Pick how many filaments you have, from 2 to 16, and the export colors every surface from the model: hull, trim, canopy and markings, reduced to that many colors. Bambu Studio opens it already painted, with filaments 1 to N assigned; the app lists which color goes in which slot and names the closest Bambu PLA Basic color for each, so you know which spool to load. Pick a **Paint** first and the print comes out in that livery.
@@ -72,6 +82,15 @@ Some other options worth knowing:
 - **Base width** and **Base depth** set the base size (0 sizes it from the model). **Posts** adds a second post, fore and aft, for long or heavy prints. The note under the stand settings says how far the model's balance point sits inside the base edge, and warns if it would tip over.
 - With **Paint colors** on, **Base color**, **Logo color**, **Text color** and **Second line color** pick the stand's filaments from the Bambu PLA Basic colors. They're added to the 3MF's filament list, reusing a model color that matches.
 - **Incline** lifts the nose (negative dips it). **Tilt** banks the model: positive drops the right wing toward the front of the stand, negative drops the left wing away from it. The socket still comes out full depth at any angle.
+
+![A ship on its stand in the 3D view, seen from the stand's front: landing gear up, weapons deployed, a black rectangular base with the maker's logo and the name in white, inclined 10 degrees and tilted 15 degrees](docs/images/show-on-stand.png)
+
+*Show on stand: gear up and weapons deployed, on a black name plate base with the logo and name in white, at 10° incline and 15° tilt.*
+
+![An example export of the ship above as a pre-painted Bambu 3MF: the ship in its filament colors and the separate black stand with the white logo and name, side by side on the build plate](docs/images/painted-3mf.png)
+
+*An example export of the model shown on its stand above, with the same settings. It's a Bambu 3MF that comes pre-painted: the model is split into four filament colors taken from the livery picked in the **Paint** list (here the stock paint), and the stand prints in black with the logo and name in white. Open it in Bambu Studio and the painting is already done, with each color assigned to a filament slot. Exported at 150 mm (1:142).*
+
 - **Hollow walls** for resin prints. Remember to add drain holes in your slicer.
 - **Separate parts (kit)** gives you every part as its own body instead of one solid, for painting or building it up like a model kit.
 
@@ -102,7 +121,7 @@ A few weapons don't have proper game animations, so they use a stance we built b
 
 ### Blender sandbox
 
-Open the sandbox and Blender starts with a test scene: a ground grid, a sun, a camera and a 1.8 m figure for scale. Back in the app, choose **Spawn in Blender sandbox** on any asset and it appears in the scene. In Blender, press `N` and open the *Asset Lens* tab.
+Open the sandbox and Blender starts with a test scene: a ground grid, a sun, a camera and a 1.8 m figure for scale. Back in the app, choose **Spawn in Blender sandbox** on any asset and it appears in the scene. In Blender, press `N` and open the *Meshyard* tab.
 
 **Spawn animated** brings a vehicle in with its animations, so you can work the landing gear, cargo doors, ramps and canopies from the *StarBreaker* tab.
 
@@ -114,10 +133,9 @@ The sandbox runs in the Blender you have installed. When you open it, the app ad
 
 The app checks these places, in order:
 
-1. Any game data you've added yourself, from the game menu, with **Choose game data…**, or under **Settings > Game**.
-2. The game launcher's own settings and logs, which record where it installed the game.
-3. The usual install folders on every drive from C: to Z:.
-4. If none of that turns anything up, it looks a few folders deep on each drive for a game folder it recognizes.
+1. Any game data you've picked yourself with **Find data files**, or under **Settings > Game**.
+2. Game launchers' own settings and logs, which record where they installed their games.
+3. If none of that turns anything up, it looks a few folders deep in the usual game folders on every drive from C: to Z: (the drive itself, Program Files, Games, and Steam and Epic libraries) and remembers what it finds.
 
 When a game keeps several builds side by side (a live build and test builds), the app picks up each one. Most builds carry a small manifest file that says exactly which build it is. That's how the app notices a new patch and rebuilds its index for you, in the background, without being asked.
 
@@ -147,12 +165,12 @@ The app stands on the shoulders of some excellent free tools. StarBreaker and cg
 Clone the repo and run the setup script. You'll need Python 3.10 or newer.
 
 ```powershell
-git clone https://github.com/10-Gauge/SC-Asset-Browser
-cd SC-Asset-Browser
+git clone https://github.com/10-Gauge/Meshyard
+cd Meshyard
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-That sets up a virtual environment and downloads StarBreaker and cgf-converter. After that you can run the browser version with **Asset Lens.cmd** (it opens in your web browser at http://127.0.0.1:8765), or use the command line:
+That sets up a virtual environment and downloads StarBreaker and cgf-converter. After that you can run the browser version with **Meshyard.cmd** (it opens in your web browser at http://127.0.0.1:8765), or use the command line:
 
 ```text
 sc-sandbox installs                          list the game builds found and whether each is indexed
@@ -213,4 +231,4 @@ The tests run the whole pipeline against a fake game install and a stand-in for 
 
 ## License
 
-The code in this repo is under the [MIT License](LICENSE). That covers the code only. Game files, and anything you pull out of them, belong to the companies that made those games. Asset Lens isn't made by, endorsed by or connected to any game developer or publisher. The bundled tools keep their own licenses, listed in [The tools behind it](#the-tools-behind-it).
+The code in this repo is under the [MIT License](LICENSE). That covers the code only. Game files, and anything you pull out of them, belong to the companies that made those games. Meshyard isn't made by, endorsed by or connected to any game developer or publisher. The bundled tools keep their own licenses, listed in [The tools behind it](#the-tools-behind-it).

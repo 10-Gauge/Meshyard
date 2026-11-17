@@ -1,10 +1,10 @@
 bl_info = {
-    "name": "SC Sandbox",
-    "author": "sc-sandbox",
+    "name": "Meshyard",
+    "author": "Meshyard",
     "version": (0, 1, 0),
     "blender": (3, 6, 0),
-    "location": "3D Viewport > Sidebar > SC Sandbox",
-    "description": "Spawn Star Citizen assets from your local install into a sandbox scene, and prep them for 3D printing",
+    "location": "3D Viewport > Sidebar > Meshyard",
+    "description": "Spawn game assets from your own game data into a sandbox scene, and prep them for 3D printing",
     "category": "Import-Export",
 }
 
@@ -168,7 +168,7 @@ def wait_for_job(job_id, label, on_done):
         try:
             j = call(f"/api/jobs/{job_id}")
         except Exception as e:
-            print("SC Sandbox:", e)
+            print("Meshyard:", e)
             return 2.0
         st = bpy.context.window_manager.sc_sandbox
         if j["state"] == "running":
@@ -433,7 +433,7 @@ def package_clips(root):
             _clip_cache[path] = [c for c in sb_ui.available_package_animation_items(PackageBundle.load(path))
                                  if c[0] not in ("*",) and not c[0].startswith("anim_")]
         except Exception as e:
-            print("SC Sandbox: could not read clips:", e)
+            print("Meshyard: could not read clips:", e)
             _clip_cache[path] = []
     return _clip_cache[path]
 
@@ -539,10 +539,10 @@ class SC_OT_make_printable(bpy.types.Operator):
 
 
 class SC_PT_panel(bpy.types.Panel):
-    bl_label = "SC Sandbox"
+    bl_label = "Meshyard"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "SC Sandbox"
+    bl_category = "Meshyard"
 
     def draw(self, context):
         st = context.window_manager.sc_sandbox

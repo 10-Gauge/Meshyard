@@ -155,18 +155,25 @@ class App:
         return self.submit("Download tools", fn)
 
     def add_root(self, path: str) -> str:
-        """Remember a game folder the user picked. Accepts the StarCitizen folder,
-        a LIVE/PTU folder inside it, or the folder above StarCitizen."""
+        """Remember game data the user picked: the data file itself, the folder it's
+        in, or the game folder holding one build folder per channel."""
         p = Path(path.strip().strip('"'))
+        if p.is_file():
+            p = p.parent
         if not p.is_dir():
             raise LookupError(f"{p} is not a folder")
-        for cand in (p, p / "StarCitizen", p / "Roberts Space Industries" / "StarCitizen"):
+        cands = [p, installs.root_of(p)]
+        try:
+            cands += [d for d in p.iterdir() if d.is_dir()]  # the folder above the game folder
+        except OSError:
+            pass
+        for cand in cands:
             if installs._discover([cand]):
-                root = str(cand)
+                root = str(installs.root_of(cand))
                 break
         else:
-            raise LookupError(f"No LIVE or PTU folder with Data.p4k found in {p}. "
-                              "Pick the StarCitizen folder (the one that contains LIVE).")
+            raise LookupError(f"No CryEngine game data ({installs.DATA_FILE}) found in {p}. "
+                              "Pick the data file, or the game folder that holds it.")
         s = config.load()
         roots = s.setdefault("install_roots", [])
         if root not in roots:
@@ -190,7 +197,7 @@ class App:
             else:
                 blendertools.install_addons(self.settings, log=log)
                 blendertools.open_sandbox(self.settings)
-                log("Blender is opening: press N and open the SC Sandbox tab")
+                log("Blender is opening: press N and open the Meshyard tab")
             return {"ok": True}
         return self.submit("Blender sandbox", fn)
 
@@ -496,6 +503,17 @@ def make_handler(app: App):
                                       "default_channel": app.settings.get("default_channel"),
                                       "print": app.settings["print"],
                                       "export_formats": [[f, exporters.LABELS[f]] for f in exporters.FORMATS]})
+                if p == "/api/datafiles":  # the data file finder: every data file on this PC
+                    files = installs.find_data_files(app.settings.get("install_roots"),
+                                                     refresh=q.get("refresh") == "1")
+                    out = []
+                    for f in files:
+                        inst = installs.load_install(f.parent)
+                        out.append({"path": str(f), "folder": str(installs.root_of(f.parent)),
+                                    "build": inst.channel if inst else "",
+                                    "version": inst.version if inst else "",
+                                    "size": f.stat().st_size if f.exists() else 0})
+                    return self.json({"files": out})
                 if p == "/api/assets":
                     inst = app.install(q.get("channel"))
                     con = app.con(inst)

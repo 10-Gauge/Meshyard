@@ -2,9 +2,9 @@ using System.Reflection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using SCAssetBrowser.Services;
+using Meshyard.Services;
 
-namespace SCAssetBrowser.Views;
+namespace Meshyard.Views;
 
 public sealed partial class SettingsPage : UserControl
 {
@@ -22,7 +22,7 @@ public sealed partial class SettingsPage : UserControl
         ThemeBox.ItemsSource = themes;
         ThemeBox.SelectedItem = themes.FirstOrDefault(t => t.Id == Prefs.Get("theme", "system")) ?? themes[0];
         HomeText.Text = Paths.Home;
-        AboutTitle.Text = "SC Asset Browser " + (Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "");
+        AboutTitle.Text = "Meshyard " + (Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "");
         _init = true;
     }
 
@@ -33,7 +33,7 @@ public sealed partial class SettingsPage : UserControl
         if (_state == null) return;
         InstallRows.Children.Clear();
         if (_state.Installs.Count == 0)
-            InstallRows.Children.Add(new TextBlock { Text = "None found yet. Add your StarCitizen folder.", Style = Res<Style>("Secondary") });
+            InstallRows.Children.Add(new TextBlock { Text = "None found yet. Click Find data files to look for some.", Style = Res<Style>("Secondary") });
         foreach (var i in _state.Installs)
         {
             var status = i.Indexed ? "Indexed" : i.IndexState switch
@@ -87,7 +87,7 @@ public sealed partial class SettingsPage : UserControl
         _main!.ApplyTheme(c.Id);
     }
 
-    async void AddFolder_Click(object sender, RoutedEventArgs e) => await _main!.ChooseGameFolderAsync();
+    async void AddFolder_Click(object sender, RoutedEventArgs e) => await _main!.FindDataFilesAsync();
 
     async void Tools_Click(object sender, RoutedEventArgs e)
     {

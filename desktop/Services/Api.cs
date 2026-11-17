@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace SCAssetBrowser.Services;
+namespace Meshyard.Services;
 
 public sealed class ApiException(string message, bool needsIndex) : Exception(message)
 {

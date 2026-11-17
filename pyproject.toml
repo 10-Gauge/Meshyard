@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sc-sandbox"
 version = "1.6.0"
-description = "Offline Star Citizen asset browser, Blender sandbox and 3D-print exporter for your own LIVE/PTU install"
+description = "Meshyard: offline game asset browser, Blender sandbox and 3D-print exporter for CryEngine game data"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

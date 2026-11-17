@@ -5,7 +5,7 @@ __pycache__/
 /build/
 /dist/
 .pytest_cache/
-SC Asset Browser.cmd
+Meshyard.cmd
 
 # desktop app build output
 desktop/bin/

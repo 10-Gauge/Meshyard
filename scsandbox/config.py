@@ -23,8 +23,8 @@ from copy import deepcopy
 from pathlib import Path
 
 DEFAULTS: dict = {
-    # Extra folders that contain LIVE/PTU/... subfolders. Auto-detection also
-    # scans the usual RSI launcher locations on every drive.
+    # Extra game folders (holding the data file, or one build folder per channel).
+    # Auto-detection also checks launcher logs and the usual game folders on every drive.
     "install_roots": [],
     # Channel used when a command does not name one.
     "default_channel": "LIVE",

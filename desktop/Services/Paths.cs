@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace SCAssetBrowser.Services;
+namespace Meshyard.Services;
 
 /// <summary>The toolkit's data folder (shared with the engine) and small helpers around it.</summary>
 public static class Paths

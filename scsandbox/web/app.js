@@ -86,10 +86,10 @@ async function loadInstalls() {
   if (!pick) {
     const btn = document.createElement("button");
     btn.className = "primary";
-    btn.textContent = "Choose game folder…";
+    btn.textContent = "Choose game data…";
     btn.onclick = chooseGameFolder;
-    showEmpty("No Star Citizen install found (no LIVE or PTU folder containing Data.p4k).\n" +
-      "Choose your StarCitizen folder: the one that contains LIVE (and PTU, if you have it)." +
+    showEmpty("No CryEngine game data found.\n" +
+      "Choose the game's data file (.p4k), or the folder that holds it." +
       (d.searched.length ? "\n\nLooked in: " + d.searched.join(", ") : ""), [btn]);
     return;
   }
@@ -114,7 +114,7 @@ function showToolState(tools) {
     : "Blender isn't installed (get it from blender.org), then restart this app";
 }
 async function chooseGameFolder() {
-  const path = prompt("Path to your StarCitizen folder (the one that contains LIVE):");
+  const path = prompt("Path to the game's data file (.p4k), or the folder that holds it:");
   if (!path) return;
   try {
     await api("/api/roots", { path });

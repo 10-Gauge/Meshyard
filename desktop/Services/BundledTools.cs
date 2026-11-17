@@ -2,7 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 
-namespace SCAssetBrowser.Services;
+namespace Meshyard.Services;
 
 /// <summary>
 /// The tools the engine runs (StarBreaker, its Blender add-on, cgf-converter and, in a

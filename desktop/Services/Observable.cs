@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace SCAssetBrowser.Services;
+namespace Meshyard.Services;
 
 public abstract class Observable : INotifyPropertyChanged
 {

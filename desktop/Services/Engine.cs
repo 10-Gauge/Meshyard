@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 
-namespace SCAssetBrowser.Services;
+namespace Meshyard.Services;
 
 /// <summary>
 /// Runs the Python engine (game indexing, model export, print conversion) as a hidden

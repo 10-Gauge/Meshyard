@@ -6,11 +6,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
-using SCAssetBrowser.Services;
+using Meshyard.Services;
 using Windows.Graphics;
 using Windows.Storage.Pickers;
 
-namespace SCAssetBrowser;
+namespace Meshyard;
 
 public sealed partial class MainWindow : Window
 {
@@ -25,7 +25,7 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
-        AppWindow.Title = "SC Asset Browser";
+        AppWindow.Title = "Meshyard";
 
         // AppWindow sizes are physical pixels: scale the layout's sizes by the display's DPI
         var scale = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96.0;
@@ -316,10 +316,13 @@ public sealed partial class MainWindow : Window
 
         if (inst == null)
         {
-            ShowState("", "No Star Citizen install found",
-                "Choose your StarCitizen folder: the one that contains LIVE (and PTU, if you have it)." +
+            ShowState("", "No CryEngine game data found",
+                "Find data files looks through the usual game folders on every drive, or you can pick the game's data file yourself." +
                 (s.Searched.Count > 0 ? "\n\nLooked in: " + string.Join(", ", s.Searched) : ""));
-            StateActions.Children.Add(AccentButton("Choose game folder…", async () => await ChooseGameFolderAsync()));
+            StateActions.Children.Add(AccentButton("Find data files…", FindDataFilesAsync));
+            var choose = new Button { Content = "Choose data file…" };
+            choose.Click += async (_, _) => await ChooseDataFileAsync();
+            StateActions.Children.Add(choose);
             return;
         }
         if (inst.Indexed)
@@ -429,12 +432,107 @@ public sealed partial class MainWindow : Window
         WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
         var folder = await picker.PickSingleFolderAsync();
         if (folder == null) return;
+        await UseGameDataAsync(folder.Path);
+    }
+
+    /// <summary>Pick a game data file (.p4k) with the file picker.</summary>
+    public async Task ChooseDataFileAsync()
+    {
+        var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.ComputerFolder };
+        picker.FileTypeFilter.Add(".p4k");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        var file = await picker.PickSingleFileAsync();
+        if (file == null) return;
+        await UseGameDataAsync(file.Path);
+    }
+
+    async Task<bool> UseGameDataAsync(string path)
+    {
         try
         {
-            await _state!.Api.PostAsync("api/roots", new JsonObject { ["path"] = folder.Path });
+            await _state!.Api.PostAsync("api/roots", new JsonObject { ["path"] = path });
             await _state.LoadInstallsAsync();
+            return true;
         }
-        catch (Exception ex) { ShowError("That folder doesn't contain a game install", ex.Message); }
+        catch (Exception ex)
+        {
+            ShowError("Meshyard can't read that game data", ex.Message);
+            return false;
+        }
+    }
+
+    void FindData_Click(object sender, RoutedEventArgs e) => _ = FindDataFilesAsync();
+
+    /// <summary>The data file finder: looks for CryEngine game data on every drive and lets
+    /// the user pick which one to browse, or browse for one by hand.</summary>
+    public async Task FindDataFilesAsync()
+    {
+        if (_state == null) return;
+        var secondary = (Style)Application.Current.Resources["Secondary"];
+        var ring = new ProgressRing { IsActive = true, Width = 32, Height = 32 };
+        var status = new TextBlock
+        {
+            Text = "Looking through the usual game folders on every drive…",
+            TextWrapping = TextWrapping.Wrap,
+            Style = secondary,
+        };
+        var list = new ListView { SelectionMode = ListViewSelectionMode.Single, MaxHeight = 320, Visibility = Visibility.Collapsed };
+        var body = new StackPanel { Spacing = 12, MinWidth = 520 };
+        body.Children.Add(status);
+        body.Children.Add(ring);
+        body.Children.Add(list);
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = "Find CryEngine data files",
+            Content = body,
+            PrimaryButtonText = "Use this file",
+            SecondaryButtonText = "Browse…",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            IsPrimaryButtonEnabled = false,
+        };
+        list.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = list.SelectedItem != null;
+
+        var shown = dialog.ShowAsync();
+        try
+        {
+            var d = await _state.Api.GetAsync("api/datafiles", ("refresh", "1"));
+            var current = _state.CurrentInstall?.Path;
+            foreach (var f in d.Items("files"))
+            {
+                var path = f.Str("path");
+                var version = f.Str("version");
+                var gb = f.Long("size") / (1024.0 * 1024 * 1024);
+                var details = new[] { f.Str("build"), version == "unknown" ? "" : version, $"{gb:0.0} GB" }.Where(x => x != "");
+                var lines = new StackPanel { Padding = new Thickness(0, 6, 0, 6) };
+                lines.Children.Add(new TextBlock { Text = path, TextWrapping = TextWrapping.Wrap });
+                lines.Children.Add(new TextBlock { Text = string.Join(" · ", details), Style = secondary });
+                var item = new ListViewItem { Tag = path, Content = lines };
+                list.Items.Add(item);
+                if (current != null && path.StartsWith(current, StringComparison.OrdinalIgnoreCase)) list.SelectedItem = item;
+            }
+            if (list.Items.Count > 0)
+            {
+                list.SelectedItem ??= list.Items[0];
+                list.Visibility = Visibility.Visible;
+                status.Text = list.Items.Count == 1
+                    ? "Found one data file. Meshyard only reads it and never changes it."
+                    : $"Found {list.Items.Count} data files. Pick the one to browse. Meshyard only reads it and never changes it.";
+            }
+            else
+            {
+                status.Text = "No CryEngine data files turned up in the usual places. Click Browse… and pick the game's .p4k file.";
+            }
+        }
+        catch (Exception ex) { status.Text = "The search didn't finish: " + ex.Message; }
+        finally { ring.IsActive = false; ring.Visibility = Visibility.Collapsed; }
+
+        var result = await shown;
+        if (result == ContentDialogResult.Primary && list.SelectedItem is ListViewItem { Tag: string chosen })
+            await UseGameDataAsync(chosen);
+        else if (result == ContentDialogResult.Secondary)
+            await ChooseDataFileAsync();
     }
 
     void ResetView_Click(object sender, RoutedEventArgs e) => _ = _state?.Viewer.ResetView();

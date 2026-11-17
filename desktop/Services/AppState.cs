@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 
-namespace SCAssetBrowser.Services;
+namespace Meshyard.Services;
 
 public sealed class AssetItem
 {

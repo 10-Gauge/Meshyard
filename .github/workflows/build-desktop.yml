@@ -30,12 +30,14 @@ jobs:
         shell: pwsh
         run: |
           $env:SCSANDBOX_HOME = "$env:RUNNER_TEMP\sc-home"
-          ./packaging/build_exe.ps1 -Python python -Name SC-Asset-Browser
+          ./packaging/build_exe.ps1 -Python python -Name Meshyard
+          # builds before 1.7.0 only update from a file with the old name
+          Copy-Item dist/Meshyard.exe dist/SC-Asset-Browser.exe
           Get-Content "$env:SCSANDBOX_HOME\self-test.log"
       - uses: actions/upload-artifact@v4
         with:
-          name: SC-Asset-Browser
-          path: dist/SC-Asset-Browser.exe
+          name: Meshyard
+          path: dist/Meshyard.exe
       - name: Publish download (rolling "desktop-latest" pre-release)
         if: github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/')
         shell: bash
@@ -43,15 +45,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete desktop-latest --cleanup-tag -y || true
-          gh release create desktop-latest "dist/SC-Asset-Browser.exe" \
-            --prerelease --target "$GITHUB_SHA" --title "SC Asset Browser (latest build)" \
-            --notes "Built from ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}. Download SC-Asset-Browser.exe and double-click it: StarBreaker and cgf-converter are inside and unpack on first run. Blender is a separate free install, and the app links to it if it's missing. Windows SmartScreen may warn because the exe isn't code-signed: choose More info > Run anyway."
+          gh release create desktop-latest "dist/Meshyard.exe" "dist/SC-Asset-Browser.exe" \
+            --prerelease --target "$GITHUB_SHA" --title "Meshyard (latest build)" \
+            --notes "Built from ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}. Download Meshyard.exe and double-click it (SC-Asset-Browser.exe is the same file, kept so older versions can update): StarBreaker and cgf-converter are inside and unpack on first run. Blender is a separate free install, and the app links to it if it's missing. Windows SmartScreen may warn because the exe isn't code-signed: choose More info > Run anyway."
       - name: Publish numbered release (when a v* tag is pushed)
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "dist/SC-Asset-Browser.exe" --verify-tag --latest \
-            --title "SC Asset Browser $GITHUB_REF_NAME" \
+          gh release create "$GITHUB_REF_NAME" "dist/Meshyard.exe" "dist/SC-Asset-Browser.exe" --verify-tag --latest \
+            --title "Meshyard $GITHUB_REF_NAME" \
             --notes-file "packaging/release-notes/$GITHUB_REF_NAME.md"

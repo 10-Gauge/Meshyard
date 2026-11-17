@@ -29,7 +29,7 @@ Write-Host "`nDetected installs:"
 & $venvPy -m scsandbox installs
 
 # Double-click launcher for the browser
-$launcher = Join-Path $PSScriptRoot "SC Asset Browser.cmd"
+$launcher = Join-Path $PSScriptRoot "Meshyard.cmd"
 "@echo off`r`n`"$venvPy`" -m scsandbox serve`r`n" | Set-Content -Encoding ASCII $launcher
 Write-Host "`nDone. Start the browser with: `"$launcher`""
 Write-Host "Optional: .venv\Scripts\sc-sandbox blender install   (adds the sandbox panel to Blender)"

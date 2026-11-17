@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Controls;
 
-namespace SCAssetBrowser.Services;
+namespace Meshyard.Services;
 
 /// <summary>Drives the three.js viewer page (the engine's /viewer) inside a WebView2.</summary>
 public sealed class Viewer

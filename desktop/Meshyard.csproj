@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    SC Asset Browser for Windows: a WinUI 3 front end over the Python engine.
+    Meshyard for Windows: a WinUI 3 front end over the Python engine.
     Build:   packaging\build_exe.ps1  (builds the engine, then publishes this as one exe)
     Dev run: dotnet run -c Debug      (uses the repo's .venv engine, see Services/Engine.cs)
   -->
@@ -8,8 +8,8 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-    <RootNamespace>SCAssetBrowser</RootNamespace>
-    <AssemblyName>SCAssetBrowser</AssemblyName>
+    <RootNamespace>Meshyard</RootNamespace>
+    <AssemblyName>Meshyard</AssemblyName>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
@@ -22,8 +22,8 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Version>1.6.0</Version>
-    <Product>SC Asset Browser</Product>
-    <AssemblyTitle>SC Asset Browser</AssemblyTitle>
+    <Product>Meshyard</Product>
+    <AssemblyTitle>Meshyard</AssemblyTitle>
     <!-- The packaged engine (PyInstaller exe) to embed; build_exe.ps1 passes it. -->
     <EngineExe Condition="'$(EngineExe)' == ''">$(MSBuildThisFileDirectory)..\build\engine\sc-engine.exe</EngineExe>
   </PropertyGroup>
@@ -33,7 +33,7 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <!-- WinUI loads its compiled XAML (resources.pri) from disk, so the bundle unpacks it -->
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
-    <!-- found under any exe name (the download is SC-Asset-Browser.exe) -->
+    <!-- found under any exe name (the download is Meshyard.exe) -->
     <ProjectPriFileName>resources.pri</ProjectPriFileName>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <EnableMsixTooling>true</EnableMsixTooling>

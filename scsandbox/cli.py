@@ -15,7 +15,7 @@ from . import __version__, catalog, config, exporters, installs, models, paints,
 def cmd_installs(a, s):
     found = installs.discover(s.get("install_roots"))
     if not found:
-        print("No installs found. Add your StarCitizen folder: sc-sandbox config add-root \"<path>\"")
+        print("No game data found. Add the game's folder: sc-sandbox config add-root \"<path>\"")
         return 1
     for i in found:
         state = "indexed" if catalog.is_current(i) else "NOT indexed (run: sc-sandbox update)"
@@ -176,7 +176,7 @@ def cmd_blender(a, s):
         blendertools.install_addons(s)
     else:
         blendertools.open_sandbox(s)
-        print("Blender is opening with the sandbox scene. Open the sidebar (N) > SC Sandbox.")
+        print("Blender is opening with the sandbox scene. Open the sidebar (N) > Meshyard.")
 
 
 def cmd_schedule(a, s):
@@ -185,13 +185,13 @@ def cmd_schedule(a, s):
     exe = Path(sys.executable).with_name("pythonw.exe")
     exe = exe if exe.exists() else Path(sys.executable)
     cmd = f'"{exe}" -m scsandbox update --all'
-    subprocess.run(["schtasks", "/Create", "/F", "/TN", "SC Sandbox update", "/SC", "DAILY", "/ST", a.time,
+    subprocess.run(["schtasks", "/Create", "/F", "/TN", "Meshyard update", "/SC", "DAILY", "/ST", a.time,
                     "/TR", cmd], check=True)
-    print(f"Task 'SC Sandbox update' runs daily at {a.time} and re-indexes LIVE and PTU after patches.")
+    print(f"Task 'Meshyard update' runs daily at {a.time} and re-indexes LIVE and PTU after patches.")
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="sc-sandbox", description="Offline Star Citizen asset browser, sandbox and 3D-print exporter")
+    p = argparse.ArgumentParser(prog="sc-sandbox", description="Meshyard: offline game asset browser, sandbox and 3D-print exporter")
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="cmd", required=True)
 

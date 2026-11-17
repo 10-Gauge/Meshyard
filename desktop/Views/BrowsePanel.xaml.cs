@@ -3,10 +3,10 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
-using SCAssetBrowser.Services;
+using Meshyard.Services;
 using Windows.Foundation;
 
-namespace SCAssetBrowser.Views;
+namespace Meshyard.Views;
 
 public sealed partial class BrowsePanel : UserControl
 {

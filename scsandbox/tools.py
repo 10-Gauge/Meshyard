@@ -120,7 +120,9 @@ def run(settings: dict, command: str, install=None, tool: str = "starbreaker",
     env = child_env()
     if install is not None:
         env["SC_DATA_P4K"] = str(install.p4k)
-        env["SC_EXE"] = str(install.path / "Bin64" / "StarCitizen.exe")
+        exes = sorted((install.path / "Bin64").glob("*.exe")) if (install.path / "Bin64").is_dir() else []
+        if exes:
+            env["SC_EXE"] = str(max(exes, key=lambda f: f.stat().st_size))  # the game's own exe
     proc = subprocess.run(argv, cwd=cwd, env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL,
                           encoding="utf-8", errors="replace", timeout=timeout, creationflags=NO_WINDOW)
     if proc.returncode != 0:

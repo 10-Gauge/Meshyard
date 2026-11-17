@@ -1,7 +1,7 @@
 using Microsoft.UI.Xaml;
-using SCAssetBrowser.Services;
+using Meshyard.Services;
 
-namespace SCAssetBrowser;
+namespace Meshyard;
 
 public partial class App : Application
 {

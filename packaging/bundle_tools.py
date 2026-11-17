@@ -115,7 +115,7 @@ def main() -> int:
             (tdir / t / "LICENSE.txt").write_text(text, encoding="utf-8")
             (tdir / t / "NOTICE.txt").write_text(
                 f"{name} {versions[t]}\nLicense: {spdx} (see LICENSE.txt)\nSource code: {url}\n"
-                f"Bundled unmodified with SC Asset Browser.\n", encoding="utf-8")
+                f"Bundled unmodified with Meshyard.\n", encoding="utf-8")
 
         if with_blender:
             print(f"== Blender {bver} (portable)")
@@ -133,7 +133,7 @@ def main() -> int:
             (bdir / "NOTICE.txt").write_text(
                 f"Blender {bver}\nLicense: GPL-3.0-or-later (see the license folder and copyright.txt)\n"
                 f"Source code: https://projects.blender.org/blender/blender (tag v{bver})\n"
-                "Bundled unmodified with SC Asset Browser; the StarBreaker and SC Sandbox add-ons are "
+                "Bundled unmodified with Meshyard; the StarBreaker and Meshyard add-ons are "
                 "pre-installed in its portable folder.\n", encoding="utf-8")
             versions["blender"] = bver
 

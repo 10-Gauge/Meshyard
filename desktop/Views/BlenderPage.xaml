@@ -1,5 +1,5 @@
 <UserControl
-    x:Class="SCAssetBrowser.Views.BlenderPage"
+    x:Class="Meshyard.Views.BlenderPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
@@ -23,7 +23,7 @@
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <Button x:Name="InstallButton" Content="Install add-ons" Click="Install_Click"
-                                ToolTipService.ToolTip="Install or update the SC Sandbox and StarBreaker add-ons in Blender" />
+                                ToolTipService.ToolTip="Install or update the Meshyard and StarBreaker add-ons in Blender" />
                         <Button x:Name="OpenButton" AutomationProperties.Name="Open sandbox" Style="{StaticResource AccentButtonStyle}" Click="Open_Click">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE8A7;" FontSize="14" />
@@ -39,9 +39,9 @@
                     <TextBlock Text="How it works" Style="{StaticResource BodyStrongTextBlockStyle}" />
                     <TextBlock Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}">
-                        <Run Text="1.  Open the sandbox: Blender starts with an empty scene and the SC Sandbox panel." /><LineBreak />
+                        <Run Text="1.  Open the sandbox: Blender starts with an empty scene and the Meshyard panel." /><LineBreak />
                         <Run Text="2.  In Browse, pick a ship or item and choose Spawn. It's exported and queued here." /><LineBreak />
-                        <Run Text="3.  In Blender, press N and open the SC Sandbox tab: queued assets appear in the scene." /><LineBreak />
+                        <Run Text="3.  In Blender, press N and open the Meshyard tab: queued assets appear in the scene." /><LineBreak />
                         <Run Text="4.  Spawn animated adds landing gear, door and ramp controls (in Blender's StarBreaker tab)." />
                     </TextBlock>
                 </StackPanel>

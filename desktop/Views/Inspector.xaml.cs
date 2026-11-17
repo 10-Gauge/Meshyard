@@ -2,9 +2,9 @@ using System.Text.Json.Nodes;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using SCAssetBrowser.Services;
+using Meshyard.Services;
 
-namespace SCAssetBrowser.Views;
+namespace Meshyard.Views;
 
 public sealed partial class Inspector : UserControl
 {

@@ -360,7 +360,7 @@ def write_bambu_3mf(out: Path, bodies: list[tuple[str, trimesh.Trimesh]], faces:
              ' xmlns:BambuStudio="http://schemas.bambulab.com/package/2021"'
              ' xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06">\n'
              f' <metadata name="Title">{escape(title)}</metadata>\n'
-             ' <metadata name="Application">SC Asset Browser</metadata>\n'
+             ' <metadata name="Application">Meshyard</metadata>\n'
              ' <metadata name="slic3rpe:MmPaintingVersion">1</metadata>\n'
              ' <resources>\n' + "".join(objects) + ' </resources>\n <build>\n' + "".join(items) + ' </build>\n</model>\n')
     n = len(colors)
