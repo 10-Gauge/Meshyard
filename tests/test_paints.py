@@ -75,7 +75,7 @@ def test_a_livery_moves_materials_to_other_paint_entries_and_lays_its_stencil(tm
     assert m[1]["baseColorFactor"][:3] == new["secondary"]           # tertiary panels now secondary
     assert m[2]["baseColorFactor"][:3] == new["spec"]["tertiary"]    # metallic red finish
     assert m[2]["metallicFactor"] == 1.0
-    assert m[3]["baseColorFactor"][:3] == new["glass"]
+    assert m[3]["baseColorFactor"][:3] == [c * paints.GLASS_TINT for c in new["glass"]]  # tinted, dark pane
     assert m[4]["baseColorFactor"][:3] == new["primary"]             # gear keeps the palette swap
     tex = m[0]["baseColorTexture"]
     assert tex["extensions"]["KHR_texture_transform"]["scale"] == [3.0, 3.0]
@@ -177,3 +177,29 @@ def test_fleck_stencils_color_the_marked_areas_and_make_them_metal(tmp_path):
     m = np.asarray(Image.open(io.BytesIO(mr)))
     assert c[0, 0, 0] > 200 and c[3, 0, 0] < 60          # pink flecks over dark paint
     assert m[0, 0, 2] == 255 and m[3, 0, 2] == 0         # metal only where marked
+
+
+def test_tint_override_stencil_paints_the_palette_colors_upside_down_on_uv2(tmp_path):
+    import io
+
+    import numpy as np
+    from PIL import Image
+    mask = np.zeros((4, 4, 4), np.uint8)
+    mask[..., 3] = 255
+    mask[0, :, 2] = 255            # blue on the image's top row: the tertiary paint
+    mask[0, :1, 1] = 255           # green over it in one corner: the secondary paint
+    Image.fromarray(mask, "RGBA").save(tmp_path / "s.png")
+    cols = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    img = np.asarray(Image.open(io.BytesIO(paints.stencil_palette(tmp_path / "s.png", [0.5, 0.5, 0.5], cols, 1.0))))
+    assert list(img[0, 1]) == [0, 0, 255] and list(img[0, 0]) == [0, 255, 0]
+    assert list(img[3, 0]) == [188, 188, 188]          # unmarked: the panel's own color
+    flipped = np.asarray(Image.open(io.BytesIO(
+        paints.stencil_palette(tmp_path / "s.png", [0.5, 0.5, 0.5], cols, 1.0, flip=True))))
+    assert list(flipped[3, 1]) == [0, 0, 255]
+
+
+def test_panel_tint_scales_its_palette_color():
+    sm = {"layer_manifest": [{"authored_attributes": [{"name": "TintColor", "value": "0.5,0.5,0.5"},
+                                                      {"name": "PaletteTint", "value": "1"}]}]}
+    assert paints._palette_layer_tint(sm) == [0.5, 0.5, 0.5]
+    assert paints._palette_layer_tint({}) == [1.0, 1.0, 1.0]

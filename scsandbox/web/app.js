@@ -434,7 +434,7 @@ $("b-print").onclick = async () => {
         // painted 3MF: which color goes in which filament slot
         const c = document.createElement("div");
         c.className = "swatches";
-        c.append("Painted for Bambu Studio. Filaments: ");
+        c.append("Painted for Bambu Studio: import it into a project (Ctrl+I) to match the colors to your filaments. Colors: ");
         r.colors.forEach((hex, i) => {
           const sw = document.createElement("span");
           sw.className = "swatch";

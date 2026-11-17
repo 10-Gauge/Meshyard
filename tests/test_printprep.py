@@ -394,11 +394,6 @@ def test_peg_preview_is_under_the_model_in_its_own_coordinates(tmp_path):
     assert printprep.peg_preview(path, printprep.PrintOptions(stand="none"))["stand"] == "none"
 
 
-def test_paint_codes_match_the_slicers_triangle_states():
-    # whole triangles painted with filament n, as Bambu Studio / PrusaSlicer write them
-    assert [printprep._paint_code(n) for n in (0, 1, 2, 3, 4, 5, 16)] == ["", "4", "8", "0C", "1C", "2C", "DC"]
-
-
 def _two_tone_parts():
     top = trimesh.creation.box(extents=[10, 4, 1]); top.apply_translation([0, 0, 0.5])
     bottom = trimesh.creation.box(extents=[10, 4, 1]); bottom.apply_translation([0, 0, -0.5])
@@ -426,10 +421,12 @@ def test_bambu_3mf_carries_paint_and_filament_colors(tmp_path):
                                     ["#112233", "#445566"], "x")
     z = zipfile.ZipFile(out)
     model = z.read("3D/3dmodel.model").decode()
-    assert model.count('paint_color="4"') == 6 and model.count('paint_color="8"') == 6
-    assert 'slic3rpe:mmu_segmentation="8"' in model
-    assert _json.loads(z.read("Metadata/project_settings.config"))["filament_colour"] == ["#112233", "#445566"]
-    assert 'lastid="11"' in z.read("Metadata/Slic3r_PE_model.config").decode()
+    # standard 3MF colors, which Bambu Studio matches to filaments when it opens the file
+    assert '<m:color color="#112233FF"/>' in model and '<m:color color="#445566FF"/>' in model
+    assert model.count('pid="2" p1="0"') == 6 and model.count('pid="2" p1="1"') == 6
+    assert model.index("m:colorgroup") < model.index("<object")    # declared before use
+    assert "paint_color" not in model           # Bambu would read slots, not colors
+    assert not [n for n in z.namelist() if n.startswith("Metadata/")]   # Bambu went grey with them
     assert len(trimesh.load(out, force="mesh").faces) == 12   # still an ordinary 3MF
 
 
@@ -515,3 +512,15 @@ def test_stand_faces_are_labeled_base_and_text_and_take_their_filaments():
     colors, slots = printprep.stand_filaments(opts, ["#8A8C8E", "#000000"])
     assert colors == ["#8A8C8E", "#000000", "#E4BD68"]      # black reused, gold added
     assert slots == {0: 2, 1: 2, 2: 3, 3: 2}                # logo and second line follow the base
+
+
+def test_colors_nobody_can_tell_apart_share_a_filament():
+    import numpy as np
+    from scsandbox import printprep
+    centers = np.array([[64, 64, 64], [42, 42, 42], [191, 13, 13]], float)
+    lab = np.array([0, 1, 2])
+    weight = np.array([3.0, 1.0, 2.0])
+    c, lab2, k = printprep._merge_close_colors(centers, lab, weight, 3)
+    assert k == 2 and list(lab2) == [0, 0, 1]
+    assert round(c[0][0]) == round((64 * 3 + 42) / 4)    # area-weighted mix
+    assert list(c[1]) == [191, 13, 13]                   # red stays its own

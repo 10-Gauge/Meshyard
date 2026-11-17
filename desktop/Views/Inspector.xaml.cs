@@ -21,7 +21,28 @@ public sealed partial class Inspector : UserControl
 
     sealed record ThinRow(string Name, ComboBox Action, NumberBox Mm);
 
-    public Inspector() => InitializeComponent();
+    public Inspector()
+    {
+        InitializeComponent();
+        // A number box's up/down buttons stay open while it has focus, and clicking the
+        // panel's empty space doesn't take focus, so they couldn't be closed: take it here.
+        Details.AddHandler(PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler(Panel_Pressed), true);
+    }
+
+    void Panel_Pressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        for (var o = e.OriginalSource as DependencyObject; o != null && o != Details; o = VisualTreeHelper.GetParent(o))
+            if (o is NumberBox or Control { IsTabStop: true }) return;  // a control that takes focus itself
+        if (Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) is DependencyObject f && InNumberBox(f))
+            Details.Focus(FocusState.Pointer);
+    }
+
+    static bool InNumberBox(DependencyObject o)
+    {
+        for (; o != null; o = VisualTreeHelper.GetParent(o))
+            if (o is NumberBox) return true;
+        return false;
+    }
 
     public void Init(AppState state, MainWindow main)
     {
@@ -499,6 +520,9 @@ public sealed partial class Inspector : UserControl
     void Paint_Toggled(object sender, SelectionChangedEventArgs e) => UpdateStand();
 
     void StandSetting_Changed(object sender, SelectionChangedEventArgs e) => RefreshPeg();
+    // the viewer's stand shows the plate's lettering: rebuild it once typing pauses
+    void Plate_Changed(object sender, TextChangedEventArgs e) => RefreshPeg(1000);
+    void Plate_Toggled(object sender, RoutedEventArgs e) => RefreshPeg();
 
     JsonObject PrintOptions()
     {
@@ -626,7 +650,7 @@ public sealed partial class Inspector : UserControl
             {
                 // the closest Bambu PLA Basic color names the spool to load in each slot
                 var names = r.Items("color_names").Select(c => c.GetValue<string>()).ToList();
-                parts.Add("painted for Bambu Studio, filaments " + string.Join(", ", colors.Select((c, i) =>
+                parts.Add("painted for Bambu Studio (import it into a project with Ctrl+I to match the colors to your filaments), colors " + string.Join(", ", colors.Select((c, i) =>
                     i < names.Count ? $"{i + 1} {c} ({names[i]})" : $"{i + 1} {c}")));
             }
             var files = r.Items("files").Select(f => f.GetValue<string>()).ToList();

@@ -25,8 +25,12 @@ VARIANTS = {
     "print": ("export_entity_print", "0"),
 }
 # Cache file tag per variant; bump when a variant's export settings change.
-FILE_TAG = {"print": "print-m",     # print-m: exported with material names
-            "preview": "preview-d"}  # preview-d: LOD 1, eighth-size textures, no lights
+# The -e tags: models cached before the part repairs matched by item could keep a part
+# without its mesh (the Idris's remote turret bodies) or with another item's.
+FILE_TAG = {"print": "print-e",     # exported with material names
+            "full": "full-e",
+            "preview": "preview-e"}  # LOD 1, eighth-size textures, no lights
+OLD_TAGS = {"print": ("print-m",), "full": ("full",), "preview": ("preview-d",)}
 # Past this the viewer model is exported again lighter (LOD 2, sixteenth-size textures).
 PREVIEW_MAX_BYTES = 250 * 2**20
 _locks: dict[str, threading.Lock] = {}
@@ -68,6 +72,14 @@ def glb_for(install: Install, settings: dict, asset: dict, variant: str = "previ
                 fix_item_meshes(out, log)
             return out
         errors = []
+        # this model's files under the old tags (with their paints and poses) are stale now
+        stem = _safe(asset["record"])
+        for old in models_dir(install).glob(f"{stem}.*"):
+            if old.name[len(stem) + 1:].split(".")[0] in OLD_TAGS.get(variant, ()):
+                try:
+                    old.unlink()
+                except OSError:
+                    pass  # open in the viewer; it goes next time
         if asset["kind"] == "entity":
             command, lod = VARIANTS[variant]
             try:
@@ -1097,6 +1109,19 @@ def rebind_borrowed_meshes(doc: dict) -> tuple[int, int]:
     for i, nd in enumerate(nodes):
         for c in nd.get("children", []):
             parent.setdefault(c, i)
+    def item_path(i):
+        # the part's names up to its item's model (the first name with capitals), so a
+        # size 5 mount's pitch_part isn't matched with a size 4 mount's
+        out, seen = [], set()
+        while i is not None and i not in seen:
+            seen.add(i)
+            name = nodes[i].get("name") or ""
+            out.append(_base_name(name))
+            if out[1:] and name != name.lower():
+                break
+            i = parent.get(i)
+        return tuple(out)
+
     borrowed = []
     for m, us in users.items():
         mname = _base_name(meshes[m].get("name"))
@@ -1118,7 +1143,9 @@ def rebind_borrowed_meshes(doc: dict) -> tuple[int, int]:
                 if k != i and "mesh" in nodes[k]]
         ref = sorted(near)[len(near) // 2] if near else wrong
         unused = [c for c in cands if not users.get(c)]
-        pool = unused or [c for c in cands if all(_base_name(nodes[u].get("name")) == own for u in users.get(c, []))] or cands
+        mine = item_path(i)
+        same = [c for c in cands if any(item_path(u) == mine for u in users.get(c, []))]
+        pool = same or unused or [c for c in cands if all(_base_name(nodes[u].get("name")) == own for u in users.get(c, []))] or cands
         best = min(pool, key=lambda c: abs(c - ref))
         nodes[i]["mesh"] = best
         users.setdefault(best, []).append(i)
