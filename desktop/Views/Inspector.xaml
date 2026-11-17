@@ -12,7 +12,7 @@
                        HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="240" />
         </StackPanel>
 
-        <ScrollViewer x:Name="Details" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer x:Name="Details" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" IsTabStop="True">
             <StackPanel Padding="18,16,18,24" Spacing="12">
                 <StackPanel Spacing="4">
                     <TextBlock x:Name="NameText" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
@@ -232,12 +232,12 @@
                                       Toggled="StandView_Toggled"
                                       ToolTipService.ToolTip="Shows the ship in the viewer on the stand these settings make, seen from the stand's front: base, post, height, incline and tilt. The viewer's stand is a simple stand-in: the exported one adds the name plate, lettering, logo and beveled front." />
                         <TextBlock x:Name="PegNote" Style="{StaticResource Secondary}" TextWrapping="Wrap" />
-                        <TextBox x:Name="PlateText" Header="Name plate text" MaxLength="60" PlaceholderText="Ship name" />
-                        <TextBox x:Name="PlateText2" Header="Second line (optional, smaller)" MaxLength="60"
+                        <TextBox x:Name="PlateText" Header="Name plate text" MaxLength="60" PlaceholderText="Ship name" TextChanged="Plate_Changed" />
+                        <TextBox x:Name="PlateText2" Header="Second line (optional, smaller)" MaxLength="60" TextChanged="Plate_Changed"
                                  PlaceholderText="Ship's own name, a motto, a date…" />
-                        <ComboBox x:Name="LogoBox" Header="Embossed logo" HorizontalAlignment="Stretch"
+                        <ComboBox x:Name="LogoBox" Header="Embossed logo" HorizontalAlignment="Stretch" SelectionChanged="StandSetting_Changed"
                                   ToolTipService.ToolTip="The manufacturer's logo from the game, raised on the plate beside the text" />
-                        <ToggleSwitch x:Name="ScaleSwitch" Header="Scale on the plate" OffContent="Off" OnContent="On, like 1:85"
+                        <ToggleSwitch x:Name="ScaleSwitch" Header="Scale on the plate" OffContent="Off" OnContent="On, like 1:85" Toggled="Plate_Toggled"
                                       ToolTipService.ToolTip="Adds the print scale to the plate's second line" />
 
                         <TextBlock x:Name="LastPrintText" Style="{StaticResource Secondary}" TextWrapping="Wrap" Visibility="Collapsed" />

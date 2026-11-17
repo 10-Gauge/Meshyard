@@ -104,3 +104,20 @@ def test_small_groups_floating_free_are_found():
 def test_a_ship_in_one_piece_loses_nothing():
     doc, bin_ = _cube_doc([(k, 0, 0) for k in range(30)] + [(30.3, 0, 0)])  # last one close enough
     assert models.detached_parts(doc, bin_) == []
+
+
+def test_borrowed_part_gets_the_mesh_of_its_own_mount_size():
+    # two mounts whose parts share names; the second S5 mount's pitch_part drew a gun
+    names = ["Ship", "Mount_Gimbal_S4", "mount_gimbal_s4", "pitch_part",
+             "Mount_Gimbal_S5", "mount_gimbal_s5", "pitch_part",
+             "Mount_Gimbal_S5", "mount_gimbal_s5", "pitch_part", "KLWE_Las_Rep_S5"]
+    doc = {"scenes": [{"nodes": [0]}], "nodes": [
+        {"name": "Ship", "children": [1, 4, 7]},
+        {"name": names[1], "children": [2]}, {"name": names[2], "children": [3]}, {"name": "pitch_part", "mesh": 0},
+        {"name": names[4], "children": [5]}, {"name": names[5], "children": [6]}, {"name": "pitch_part", "mesh": 1},
+        {"name": names[7], "children": [8]}, {"name": names[8], "children": [9, 10]}, {"name": "pitch_part", "mesh": 2},
+        {"name": "KLWE_Las_Rep_S5", "mesh": 2},
+    ], "meshes": [{"name": "pitch_part"}, {"name": "pitch_part"}, {"name": "KLWE_Las_Rep_S5"}]}
+    rebound, dropped = models.rebind_borrowed_meshes(doc)
+    assert (rebound, dropped) == (1, 0)
+    assert doc["nodes"][9]["mesh"] == 1      # the S5 mount's, not the S4's
