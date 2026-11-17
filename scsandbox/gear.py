@@ -268,6 +268,22 @@ def _pose_current(install: Install, asset: dict, kind: str) -> bool:
         return False
 
 
+def blender_available(settings: dict) -> bool:
+    try:
+        tools.find("blender", settings)
+        return True
+    except (tools.ToolError, OSError, KeyError, TypeError):
+        return False
+
+
+def landed_unknown(install: Install, asset: dict) -> bool:
+    """True until the ship's landed shape has been worked out (with this POSE_VERSION)."""
+    try:
+        return not (_pose_path(install, asset, "landed").exists() and _pose_current(install, asset, "landed"))
+    except (AttributeError, TypeError, OSError):
+        return False
+
+
 def has_landed_shape(install: Install, asset: dict) -> bool:
     """Whether the ship's landed shape is known and differs from its export (worked out
     with its gear pose, so no Blender run is needed to answer)."""
@@ -281,16 +297,17 @@ def has_landed_shape(install: Install, asset: dict) -> bool:
 def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_up: bool = False,
               weapons: str | None = None, log=print, vtol: bool = False, flight: bool = False) -> Path:
     """The ship's model for `variant` with the gear up, the weapons "out" or "in", the
-    thrusters in VTOL mode and/or flight mode (flaps open) (cached; stacked in that order). With the gear down, ships
-    that change shape on the ground (the Eclipse and Stingray fold their wings) get that
-    shape once it's known: it's worked out alongside the gear-up pose."""
+    thrusters in VTOL mode and/or flight mode (cached; stacked in that order). With the
+    gear down, ships that change shape on the ground (the Eclipse and Stingray fold their
+    wings, the Stingray and Mole are exported gear up) get that shape: it's worked out the
+    first time the ship is shown, when Blender is installed."""
     glb = models.glb_for(install, settings, asset, variant, log=log)
     try:
         landed_known = _pose_path(install, asset, "landed").exists() and _pose_current(install, asset, "landed")
     except (AttributeError, TypeError, OSError):
         landed_known = False
-    if gear_up and not landed_known:
-        try:  # the landed shape comes from the same rig; get it now so gear down can show it
+    if not landed_known and blender_available(settings):
+        try:  # once per ship: does it look different on the ground than in its export?
             pose_for(install, settings, asset, log, kind="landed")
         except (NoPose, tools.ToolError):
             pass
