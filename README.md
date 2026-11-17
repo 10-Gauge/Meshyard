@@ -2,7 +2,7 @@
 
 Browse every ship, vehicle, weapon, prop and piece of armor in your Star Citizen install, look at it in 3D, and turn it into something you can print or open in Blender.
 
-![The Browse page with the Aegis Eclipse loaded: search results on the left, the 3D view in the middle, and the landing gear, weapons and 3D print options on the right](docs/images/app-browse.png)
+![The Browse page with the Anvil F8C Lightning Executive Edition loaded: search results on the left, the 3D view in the middle, and the paint, landing gear, weapons, VTOL, flight mode and 3D print options on the right](docs/images/app-browse.png)
 
 It runs on your own PC against your own copy of the game. It only ever reads `Data.p4k`, it doesn't talk to CIG's servers, and it never touches the game client or Easy Anti-Cheat. Anything you pull out of the game is CIG's work, so keep it for your own use and don't share the files around.
 
