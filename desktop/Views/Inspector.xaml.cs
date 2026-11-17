@@ -162,7 +162,47 @@ public sealed partial class Inspector : UserControl
             _ = _state!.Viewer.Show(_state.Api.Url(t.FigureUrl!));
             _ = Measure(t, "preview");
         }
-        else _ = LoadModel("preview");
+        else
+        {
+            _ = LoadPaints(t);
+            _ = LoadModel("preview");
+        }
+    }
+
+    // ---------- paints ----------
+
+    bool _settingPaint;
+
+    /// <summary>The ship's paints (liveries), its default first; hidden when it has none.</summary>
+    async Task LoadPaints(Target t)
+    {
+        _settingPaint = true;
+        PaintBox.Items.Clear();
+        PaintBox.Visibility = Visibility.Collapsed;
+        _settingPaint = false;
+        if (t.Asset == null) return;
+        try
+        {
+            var d = await _state!.Api.GetAsync($"api/assets/{t.Asset.Id}/paints", ("channel", _state.Channel));
+            if (_state.Selected != t) return;
+            var items = d["items"] as JsonArray ?? [];
+            if (items.Count == 0) return;
+            _settingPaint = true;
+            foreach (var p in items)
+                PaintBox.Items.Add(new ComboBoxItem { Content = p.Str("name"), Tag = p.Str("id") });
+            PaintBox.SelectedIndex = 0;
+            _settingPaint = false;
+            PaintBox.Visibility = Visibility.Visible;
+        }
+        catch { /* no paints: the box stays hidden */ }
+    }
+
+    string PaintId => PaintBox.Visibility == Visibility.Visible && PaintBox.SelectedItem is ComboBoxItem { Tag: string id } ? id : "";
+
+    void Paint_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_settingPaint || _state?.Selected?.Asset == null) return;
+        _ = LoadModel(_variant);
     }
 
     bool GearUp => GearSwitch.IsOn && GearRow.Visibility == Visibility.Visible && _state?.Selected?.Asset != null;
@@ -203,6 +243,7 @@ public sealed partial class Inspector : UserControl
             {
                 ["channel"] = s.Channel, ["id"] = t.Asset.Id, ["variant"] = variant, ["spawn"] = spawn,
                 ["gear"] = gearUp ? "up" : "down", ["weapons"] = weaponsOut ? "out" : "", ["vtol"] = vtol, ["flight"] = flight,
+                ["paint"] = variant == "animated" ? "" : PaintId,
             });
             var r = await s.Jobs.RunAsync(job);
             if (!spawn && seq == _loadSeq && r.Str("url") is { Length: > 0 } url)
@@ -440,6 +481,7 @@ public sealed partial class Inspector : UserControl
         if (WeaponsOut) body["weapons"] = "out";
         if (VtolOn) body["vtol"] = true;
         if (FlightOn) body["flight"] = true;
+        if (PaintId is { Length: > 0 } paint) body["paint"] = paint;
         return body;
     }
 

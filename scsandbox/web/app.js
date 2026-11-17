@@ -240,8 +240,25 @@ function select(a, li) {
   $("flight-row").hidden = a.category !== "spaceships";
   $("p-thin").hidden = true;
   $("p-thin").innerHTML = "";
+  loadPaints(a);
   loadModel("preview");
 }
+
+// the ship's paints (liveries), its default first; hidden for things without any
+async function loadPaints(a) {
+  const sel = $("b-paint");
+  sel.innerHTML = "";
+  $("paint-row").hidden = true;
+  if (!a.id || a.figure) return;
+  try {
+    const { items } = await api(`/api/assets/${a.id}/paints?channel=${encodeURIComponent(state.channel)}`);
+    if (state.selected !== a || !items.length) return;
+    for (const p of items) sel.append(new Option(p.name, p.id));
+    $("paint-row").hidden = false;
+  } catch (e) { /* no paints: the row stays hidden */ }
+}
+const paintId = () => ($("paint-row").hidden ? "" : $("b-paint").value) || "";
+$("b-paint").onchange = () => loadModel(state.variant || "preview");
 
 async function loadModel(variant, spawn = false) {
   const a = state.selected;
@@ -256,7 +273,8 @@ async function loadModel(variant, spawn = false) {
     const weapons = weaponsOut() && variant !== "animated" ? "out" : "";
     const vtol = !!vtolOn() && variant !== "animated";
     const flight = !!flightOn() && variant !== "animated";
-    const { job } = await api("/api/model", { channel: state.channel, id: a.id, variant, spawn, gear, weapons, vtol, flight });
+    const { job } = await api("/api/model", { channel: state.channel, id: a.id, variant, spawn, gear, weapons, vtol, flight,
+      paint: variant === "animated" ? "" : paintId() });
     trackJob(job, (r) => { if (!spawn && state.selected === a) showModel(r.url); },
       (err) => { if (!spawn && state.selected === a) viewerMsg("Export failed: " + err.split("\n").slice(-3).join(" ")); });
   } catch (e) { viewerMsg(e.message); }
@@ -423,7 +441,7 @@ $("b-export").onclick = async () => {
 
 // ---------- character builder ----------
 // The print / thin-part / export requests are about an indexed asset or a built figure.
-function target(a) { return a.figure ? { figure: a.figure, label: a.name } : { id: a.id, gear: gearUp() ? "up" : "down", weapons: weaponsOut() ? "out" : "", vtol: !!vtolOn(), flight: !!flightOn() }; }
+function target(a) { return a.figure ? { figure: a.figure, label: a.name } : { id: a.id, gear: gearUp() ? "up" : "down", weapons: weaponsOut() ? "out" : "", vtol: !!vtolOn(), flight: !!flightOn(), paint: paintId() }; }
 
 const chars = { on: false, slots: [], picks: {}, loadedBody: null };
 

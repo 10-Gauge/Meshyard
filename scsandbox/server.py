@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import (blendertools, catalog, characters, config, exporters, gear, installs, logos, models, printlog,
+from . import (blendertools, catalog, characters, config, exporters, gear, installs, logos, models, paints, printlog,
                printprep, rig, sandbox, tools)
 
 WEB = Path(__file__).parent / "web"
@@ -100,7 +100,7 @@ class App:
         return self.submit(f"Index {inst.channel} {inst.version}", fn)
 
     def job_model(self, channel: str, asset_id: int, variant: str, spawn: bool, gear_up: bool = False,
-                  weapons: str | None = None, vtol: bool = False, flight: bool = False):
+                  weapons: str | None = None, vtol: bool = False, flight: bool = False, paint: str = ""):
         inst = self.install(channel)
         asset = catalog.get(self.con(inst), asset_id)
         if not asset:
@@ -109,6 +109,7 @@ class App:
         def fn(log):
             if (gear_up or weapons or vtol or flight or _shape_pending(inst, asset, self.settings)) and variant != "animated":
                 glb = _posed(inst, self.settings, asset, variant, gear_up, weapons, log, vtol, flight)
+                glb = paints.painted_glb(inst, self.settings, asset, glb, paint, log)
                 if spawn:
                     sandbox.add(asset["record"], asset["name"], glb, inst.channel, inst.build_id)
                     log("queued for the Blender sandbox")
@@ -122,6 +123,7 @@ class App:
                     log("queued for the Blender sandbox")
                 return {"url": None, "path": str(pkg)}
             glb = models.glb_for(inst, self.settings, asset, variant, log=log)
+            glb = paints.painted_glb(inst, self.settings, asset, glb, paint, log)
             if spawn:
                 sandbox.add(asset["record"], asset["name"], glb, inst.channel, inst.build_id)
                 log("queued for the Blender sandbox")
@@ -482,6 +484,13 @@ def make_handler(app: App):
                     inst = app.install(q.get("channel"))
                     a = catalog.get(app.con(inst), int(m.group(1)))
                     return self.json(a) if a else self.json({"error": "not found"}, 404)
+                m = re.fullmatch(r"/api/assets/(\d+)/paints", p)
+                if m:  # the liveries this ship can wear, its default first
+                    inst = app.install(q.get("channel"))
+                    a = catalog.get(app.con(inst), int(m.group(1)))
+                    if not a:
+                        return self.json({"error": "not found"}, 404)
+                    return self.json({"items": paints.ship_paints(inst, app.settings, a, log=lambda *_: None)})
                 m = re.fullmatch(r"/api/jobs/(\w+)", p)
                 if m:
                     job = app.jobs.get(m.group(1))
@@ -518,7 +527,8 @@ def make_handler(app: App):
                     return self.json({"job": app.job_model(b.get("channel"), int(b["id"]),
                                                            b.get("variant", "preview"), bool(b.get("spawn")),
                                                            gear_up=b.get("gear") == "up", weapons=_weapons(b),
-                                                           vtol=bool(b.get("vtol")), flight=bool(b.get("flight")))})
+                                                           vtol=bool(b.get("vtol")), flight=bool(b.get("flight")),
+                                                           paint=str(b.get("paint") or ""))})
                 if p == "/api/character/build":
                     return self.json({"job": app.job_character(b.get("channel"), b)})
                 if p == "/api/print":
