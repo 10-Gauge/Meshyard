@@ -807,6 +807,27 @@ def _drop_specks(v: np.ndarray, min_voxels: int) -> None:
         v &= np.isin(labels, np.nonzero(sizes >= min_voxels)[0] + 1)
 
 
+# loose pieces under this share of the main body, still apart after joining, are debris
+LOOSE_SHARE = 0.005
+
+
+def drop_loose_bits(g: Grid, log=print) -> int:
+    """Remove small pieces left floating free of the model after connect_pieces: specks
+    of an emblem or a gear part the game hangs in mid-air. In a print they come off as
+    loose bits or fall over on the bed. Returns pieces removed."""
+    from scipy import ndimage
+    labels, n = ndimage.label(g.v)
+    if n <= 1:
+        return 0
+    sizes = ndimage.sum(g.v, labels, range(1, n + 1))
+    keep = np.nonzero(sizes >= LOOSE_SHARE * sizes.max())[0] + 1
+    dropped = n - len(keep)
+    if dropped:
+        g.v &= np.isin(labels, keep)
+        log(f"  removed {dropped} loose bit(s) too small to print on their own")
+    return dropped
+
+
 def connect_pieces(g: Grid, min_mm: float, max_gap_mm: float, log=print) -> int:
     """Join loose pieces to the main body with a short strut at their closest point.
 
@@ -1427,6 +1448,7 @@ def prepare(glb: Path, out: Path, opts: PrintOptions, log=print) -> dict:
         if opts.thicken and min_mm > 0:
             report.update(thicken_thin_features(g, min_mm, log))
         report["joined"] = connect_pieces(g, min_mm, max(JOIN_GAP_MM, JOIN_GAP_SHARE * opts.size_mm), log)
+        report["loose_removed"] = drop_loose_bits(g, log)
         spec = plan_stand(g, opts, log) if opts.stand != "none" else None
         stand_h = opts.stand_height_mm
         if spec and opts.figure:

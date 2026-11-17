@@ -427,3 +427,12 @@ def test_bambu_3mf_carries_paint_and_filament_colors(tmp_path):
     assert _json.loads(z.read("Metadata/project_settings.config"))["filament_colour"] == ["#112233", "#445566"]
     assert 'lastid="11"' in z.read("Metadata/Slic3r_PE_model.config").decode()
     assert len(trimesh.load(out, force="mesh").faces) == 12   # still an ordinary 3MF
+
+
+def test_loose_bits_are_dropped_but_real_parts_stay():
+    g = printprep.Grid(np.zeros(3), np.array([40.0, 40.0, 40.0]), 1.0, 1)
+    g.v[2:30, 2:30, 2:20] = True        # the model
+    g.v[35:37, 35:37, 35:37] = True     # an 8-voxel speck far away
+    g.v[2:12, 33:40, 2:12] = True       # a 700-voxel piece: big enough to keep
+    assert printprep.drop_loose_bits(g, log=lambda *_: None) == 1
+    assert not g.v[35:37, 35:37, 35:37].any() and g.v[5, 35, 5]
