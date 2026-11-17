@@ -77,6 +77,10 @@ Some other options worth knowing:
 
 *Show on stand: a Kruger L-22 Alpha Wolf with its gear up and weapons deployed, on a black name plate base with the logo and name in white, at 10° incline and 15° tilt.*
 
+![The same Alpha Wolf exported as a painted 3MF: the ship in its filament colors and the separate black stand with the white Kruger logo and name, side by side on the build plate](docs/images/alpha-wolf-painted-3mf.png)
+
+*The same settings exported as a painted 3MF at 150 mm (1:142): the ship in four filament colors from its paint, and the stand in black with the logo and name in white, ready for Bambu Studio.*
+
 - **Hollow walls** for resin prints. Remember to add drain holes in your slicer.
 - **Separate parts (kit)** gives you every part as its own body instead of one solid, for painting or building it up like a model kit.
 
