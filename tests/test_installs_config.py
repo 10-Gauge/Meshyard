@@ -4,7 +4,7 @@ from scsandbox import config, installs
 
 
 def test_save_writes_only_changes(tmp_path, monkeypatch):
-    monkeypatch.setenv("SCSANDBOX_HOME", str(tmp_path))
+    monkeypatch.setenv("MESHYARD_HOME", str(tmp_path))
     s = config.load()
     s["install_roots"] = ["D:/Games/SomeGame"]
     config.save(s)
@@ -33,7 +33,7 @@ def test_launcher_log_paths(tmp_path, monkeypatch):
 
 
 def test_find_data_files_and_root_of(tmp_path, monkeypatch):
-    monkeypatch.setenv("SCSANDBOX_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("MESHYARD_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
     monkeypatch.setattr(installs, "_scan_cache", (1e18, []))  # skip the drive scan
     game = tmp_path / "Games" / "SomeGame"
@@ -53,3 +53,18 @@ def test_scan_finds_data_a_few_levels_down(tmp_path):
     (tmp_path / "Windows" / "x" / "LIVE").mkdir(parents=True)
     (tmp_path / "Windows" / "x" / "LIVE" / "Data.p4k").write_bytes(b"PK")  # system folders are skipped
     assert installs._scan_for_data(tmp_path, depth=4) == [deep]
+
+
+def test_old_data_folder_moves_over(tmp_path, monkeypatch):
+    monkeypatch.delenv("MESHYARD_HOME", raising=False)
+    monkeypatch.delenv("SCSANDBOX_HOME", raising=False)
+    monkeypatch.setattr(config.sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setattr(config, "_migrated", False)
+    old = tmp_path / "sc-sandbox"
+    (old / "exports").mkdir(parents=True)
+    (old / "settings.json").write_text(json.dumps({"tools": {"starbreaker": str(old / "tools" / "sb.exe")}}))
+    home = config.home()
+    assert home == tmp_path / "Meshyard" and not old.exists()
+    assert (home / "exports").is_dir()
+    assert json.loads((home / "settings.json").read_text())["tools"]["starbreaker"] == str(home / "tools" / "sb.exe")

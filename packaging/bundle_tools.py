@@ -2,7 +2,7 @@
 
     python packaging/bundle_tools.py <out.zip> [--with-blender] [--blender-version 5.2.2]
 
-Contents (each top-level folder is unpacked to %LOCALAPPDATA%\\sc-sandbox\\tools\\<name>):
+Contents (each top-level folder is unpacked to %LOCALAPPDATA%\\Meshyard\\tools\\<name>):
     starbreaker/        StarBreaker CLI (latest release; MIT)
     starbreaker_addon/  StarBreaker's Blender add-on from the same release
     cgf_converter/      cgf-converter (latest release; GPL-2.0)
@@ -43,7 +43,7 @@ def _get(url: str, dest: Path) -> Path:
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
     print(f"  downloading {url}")
-    req = urllib.request.Request(url, headers={"User-Agent": "sc-sandbox-build"})
+    req = urllib.request.Request(url, headers={"User-Agent": "meshyard-build"})
     tmp = dest.with_suffix(dest.suffix + ".part")
     with urllib.request.urlopen(req, timeout=1800) as r, open(tmp, "wb") as f:
         shutil.copyfileobj(r, f, 1 << 20)
@@ -68,7 +68,7 @@ def _blender_zip(version: str) -> Path:
     for site in BLENDER_SITES:
         base = f"{site}/Blender{major}"
         try:
-            req = urllib.request.Request(f"{base}/blender-{version}.sha256", headers={"User-Agent": "sc-sandbox-build"})
+            req = urllib.request.Request(f"{base}/blender-{version}.sha256", headers={"User-Agent": "meshyard-build"})
             with urllib.request.urlopen(req, timeout=120) as r:
                 sums = dict(reversed(line.split()) for line in r.read().decode().splitlines() if line.strip())
             want = sums[name]
@@ -90,7 +90,7 @@ def _license(repo: str) -> tuple[str, str]:
     """(SPDX id, license text) from GitHub."""
     import base64
     req = urllib.request.Request(f"https://api.github.com/repos/{repo}/license",
-                                 headers={"User-Agent": "sc-sandbox-build", "Accept": "application/vnd.github+json"})
+                                 headers={"User-Agent": "meshyard-build", "Accept": "application/vnd.github+json"})
     with urllib.request.urlopen(req, timeout=120) as r:
         j = json.load(r)
     return j["license"]["spdx_id"], base64.b64decode(j["content"]).decode("utf-8", "replace")
@@ -101,7 +101,7 @@ def main() -> int:
     bver = sys.argv[sys.argv.index("--blender-version") + 1] if "--blender-version" in sys.argv else "5.2.2"
     with_blender = "--with-blender" in sys.argv
     with tempfile.TemporaryDirectory() as home:
-        os.environ["SCSANDBOX_HOME"] = home          # the app's own updater, into a scratch home
+        os.environ["MESHYARD_HOME"] = home          # the app's own updater, into a scratch home
         sys.path.insert(0, str(ROOT))
         from scsandbox import tools
         tdir = tools.tools_dir()

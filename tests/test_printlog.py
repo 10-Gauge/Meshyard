@@ -4,7 +4,7 @@ from scsandbox import printlog, printprep
 
 
 def test_log_records_each_export_and_filters_by_item(tmp_path, monkeypatch):
-    monkeypatch.setenv("SCSANDBOX_HOME", str(tmp_path))
+    monkeypatch.setenv("MESHYARD_HOME", str(tmp_path))
     opts = printprep.PrintOptions(size_mm=300, stand="peg", stand_shape="rect", stand_text="Aegis Eclipse",
                                   stand_text2="Truth Nuke   1:70")
     printlog.add("Aegis Eclipse", "AEGS_Eclipse", opts, {"scale": "1:70", "size_mm": [300, 167, 39],

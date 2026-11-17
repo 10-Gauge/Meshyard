@@ -13,7 +13,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     home = tmp_path / "home"
-    monkeypatch.setenv("SCSANDBOX_HOME", str(home))
+    monkeypatch.setenv("MESHYARD_HOME", str(home))
     root = tmp_path / "SomeGame"
     for ch, ver, change in (("LIVE", "4.3.1-live.10234567", "10234567"), ("PTU", "4.4.0-ptu.10300001", "10300001")):
         d = root / ch

@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_viewer_page_and_module_are_served(tmp_path, monkeypatch):
-    monkeypatch.setenv("SCSANDBOX_HOME", str(tmp_path))
+    monkeypatch.setenv("MESHYARD_HOME", str(tmp_path))
     httpd, _app, url = server.start(config.load(), port=0, auto=False)
     try:
         for path, needle in (("viewer", b"window.viewer"), ("static/viewer.js", b"export function createViewer"),
@@ -22,8 +22,8 @@ def test_viewer_page_and_module_are_served(tmp_path, monkeypatch):
 
 
 def test_engine_prints_ready_and_exits_when_stdin_closes(tmp_path):
-    env = {**os.environ, "SCSANDBOX_HOME": str(tmp_path), "PYTHONUNBUFFERED": "1",
-           "SCSANDBOX_NO_AUTO": "1"}
+    env = {**os.environ, "MESHYARD_HOME": str(tmp_path), "PYTHONUNBUFFERED": "1",
+           "MESHYARD_NO_AUTO": "1"}
     p = subprocess.Popen([sys.executable, "-m", "scsandbox.engine"], cwd=ROOT, env=env, text=True,
                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     try:

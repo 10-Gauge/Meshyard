@@ -51,7 +51,7 @@ public static class Updater
     public static bool CanSelfUpdate =>
         ExePath != null
         && !Path.GetFileNameWithoutExtension(ExePath).Equals("dotnet", StringComparison.OrdinalIgnoreCase)
-        && Assembly.GetExecutingAssembly().GetManifestResourceInfo("sc-engine.exe") != null;
+        && Assembly.GetExecutingAssembly().GetManifestResourceInfo("meshyard-engine.exe") != null;
 
     static string DownloadPath => ExePath + ".download";
 

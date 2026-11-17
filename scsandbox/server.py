@@ -425,7 +425,7 @@ def print_opts(body: dict) -> dict:
 
 def make_handler(app: App):
     class Handler(BaseHTTPRequestHandler):
-        server_version = "sc-sandbox"
+        server_version = "meshyard"
 
         def log_message(self, fmt, *args):  # quiet console
             pass

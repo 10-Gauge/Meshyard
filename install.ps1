@@ -32,5 +32,5 @@ Write-Host "`nDetected installs:"
 $launcher = Join-Path $PSScriptRoot "Meshyard.cmd"
 "@echo off`r`n`"$venvPy`" -m scsandbox serve`r`n" | Set-Content -Encoding ASCII $launcher
 Write-Host "`nDone. Start the browser with: `"$launcher`""
-Write-Host "Optional: .venv\Scripts\sc-sandbox blender install   (adds the sandbox panel to Blender)"
-Write-Host "Optional: .venv\Scripts\sc-sandbox schedule          (re-index LIVE and PTU daily)"
+Write-Host "Optional: .venv\Scripts\meshyard blender install   (adds the sandbox panel to Blender)"
+Write-Host "Optional: .venv\Scripts\meshyard schedule          (re-index LIVE and PTU daily)"

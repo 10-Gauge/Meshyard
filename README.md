@@ -28,7 +28,7 @@ Every time you open the app it checks GitHub for a newer version. If there is on
 
 The first launch takes a little longer than usual:
 
-1. It unpacks its tools into `%LOCALAPPDATA%\sc-sandbox\tools`. That takes a few seconds and only happens once per version.
+1. It unpacks its tools into `%LOCALAPPDATA%\Meshyard\tools`. That takes a few seconds and only happens once per version.
 2. It finds your game (see [Finding your game](#finding-your-game) below). If it can't, click **Find data files** at the top of the window. It lists every CryEngine data file it can find, and **Browse…** lets you pick one yourself.
 3. It reads the game's item database and builds a search index. Give it a few minutes. This happens once per patch, and after that searching is instant.
 
@@ -94,9 +94,9 @@ Some other options worth knowing:
 - **Hollow walls** for resin prints. Remember to add drain holes in your slicer.
 - **Separate parts (kit)** gives you every part as its own body instead of one solid, for painting or building it up like a model kit.
 
-Finished files go to `%LOCALAPPDATA%\sc-sandbox\exports`, and **Show in folder** takes you straight there.
+Finished files go to `%LOCALAPPDATA%\Meshyard\exports`, and **Show in folder** takes you straight there.
 
-Every print export is also written to a log (`print-log.csv` in the same folder), so you can always look up what scale you printed something at. The print panel shows when you last printed the selected item and at what scale, and **Print history…** lists everything. From the command line it's `sc-sandbox prints`.
+Every print export is also written to a log (`print-log.csv` in the same folder), so you can always look up what scale you printed something at. The print panel shows when you last printed the selected item and at what scale, and **Print history…** lists everything. From the command line it's `meshyard prints`.
 
 ### Exporting models
 
@@ -147,7 +147,7 @@ If a big patch changes the game's file formats and something stops working, go t
 
 ## Where things live
 
-Everything the app writes goes in `%LOCALAPPDATA%\sc-sandbox`: settings, the tools, the search index for each build, cached models, and your exports. Delete that folder and you're back to a clean start. Nothing is written anywhere else, and nothing in your game folder is ever changed.
+Everything the app writes goes in `%LOCALAPPDATA%\Meshyard`: settings, the tools, the search index for each build, cached models, and your exports. Versions before 1.7.0 used `%LOCALAPPDATA%\sc-sandbox`, and the first time a newer version starts it moves everything over, settings and all. Delete the Meshyard folder and you're back to a clean start. Nothing is written anywhere else, and nothing in your game folder is ever changed.
 
 ## The tools behind it
 
@@ -173,23 +173,23 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 That sets up a virtual environment and downloads StarBreaker and cgf-converter. After that you can run the browser version with **Meshyard.cmd** (it opens in your web browser at http://127.0.0.1:8765), or use the command line:
 
 ```text
-sc-sandbox installs                          list the game builds found and whether each is indexed
-sc-sandbox update [-c PTU | --all]           index the current build
-sc-sandbox search fighter [-c PTU]           search the index
-sc-sandbox model <entity> --out model.glb    export a model as GLB
-sc-sandbox print <name> --size 200           printable 3MF, 200 mm long
-sc-sandbox print <name> --scale 100          printable 3MF at 1:100
-sc-sandbox print <name> --mode parts --format stl    one STL per part
-sc-sandbox print <name> --stand peg --list-thin      list parts too thin to print at that size
-sc-sandbox print my_model.glb --glb          make any GLB printable
-sc-sandbox export <name> -f fbx              FBX, OBJ, glTF, DAE, USDZ and so on
-sc-sandbox blender install | open            set up or open the Blender sandbox
-sc-sandbox tools update                      update StarBreaker and cgf-converter
-sc-sandbox schedule --time 09:00             re-index every day with Task Scheduler
-sc-sandbox config show | set KEY VALUE       settings (%LOCALAPPDATA%\sc-sandbox\settings.json)
+meshyard installs                          list the game builds found and whether each is indexed
+meshyard update [-c PTU | --all]           index the current build
+meshyard search fighter [-c PTU]           search the index
+meshyard model <entity> --out model.glb    export a model as GLB
+meshyard print <name> --size 200           printable 3MF, 200 mm long
+meshyard print <name> --scale 100          printable 3MF at 1:100
+meshyard print <name> --mode parts --format stl    one STL per part
+meshyard print <name> --stand peg --list-thin      list parts too thin to print at that size
+meshyard print my_model.glb --glb          make any GLB printable
+meshyard export <name> -f fbx              FBX, OBJ, glTF, DAE, USDZ and so on
+meshyard blender install | open            set up or open the Blender sandbox
+meshyard tools update                      update StarBreaker and cgf-converter
+meshyard schedule --time 09:00             re-index every day with Task Scheduler
+meshyard config show | set KEY VALUE       settings (%LOCALAPPDATA%\Meshyard\settings.json)
 ```
 
-If your game is somewhere unusual, tell it where: `sc-sandbox config add-root "D:\Games\<game folder>"`.
+If your game is somewhere unusual, tell it where: `meshyard config add-root "D:\Games\<game folder>"`.
 
 ### How it fits together
 

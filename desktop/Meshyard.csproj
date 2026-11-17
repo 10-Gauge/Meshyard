@@ -25,7 +25,7 @@
     <Product>Meshyard</Product>
     <AssemblyTitle>Meshyard</AssemblyTitle>
     <!-- The packaged engine (PyInstaller exe) to embed; build_exe.ps1 passes it. -->
-    <EngineExe Condition="'$(EngineExe)' == ''">$(MSBuildThisFileDirectory)..\build\engine\sc-engine.exe</EngineExe>
+    <EngineExe Condition="'$(EngineExe)' == ''">$(MSBuildThisFileDirectory)..\build\engine\meshyard-engine.exe</EngineExe>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
@@ -47,7 +47,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\app.ico" LogicalName="app.ico" />
-    <EmbeddedResource Include="$(EngineExe)" LogicalName="sc-engine.exe" Condition="'$(Configuration)' == 'Release' And Exists('$(EngineExe)')" />
+    <EmbeddedResource Include="$(EngineExe)" LogicalName="meshyard-engine.exe" Condition="'$(Configuration)' == 'Release' And Exists('$(EngineExe)')" />
     <EmbeddedResource Include="Assets\app-256.png" LogicalName="app-256.png" />
   </ItemGroup>
 </Project>

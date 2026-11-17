@@ -1,4 +1,4 @@
-"""Command line: `sc-sandbox <command>` (or `python -m scsandbox <command>`)."""
+"""Command line: `meshyard <command>` (or `python -m scsandbox <command>`)."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ from . import __version__, catalog, config, exporters, installs, models, paints,
 def cmd_installs(a, s):
     found = installs.discover(s.get("install_roots"))
     if not found:
-        print("No game data found. Add the game's folder: sc-sandbox config add-root \"<path>\"")
+        print("No game data found. Add the game's folder: meshyard config add-root \"<path>\"")
         return 1
     for i in found:
-        state = "indexed" if catalog.is_current(i) else "NOT indexed (run: sc-sandbox update)"
+        state = "indexed" if catalog.is_current(i) else "NOT indexed (run: meshyard update)"
         print(f"{i.channel:<13} {i.version:<22} change {i.change:<10} {state}\n{'':14}{i.path}")
 
 
@@ -181,7 +181,7 @@ def cmd_blender(a, s):
 
 def cmd_schedule(a, s):
     if sys.platform != "win32":
-        raise SystemExit("Scheduling uses Windows Task Scheduler; on other systems add a cron job for: sc-sandbox update --all")
+        raise SystemExit("Scheduling uses Windows Task Scheduler; on other systems add a cron job for: meshyard update --all")
     exe = Path(sys.executable).with_name("pythonw.exe")
     exe = exe if exe.exists() else Path(sys.executable)
     cmd = f'"{exe}" -m scsandbox update --all'
@@ -191,7 +191,7 @@ def cmd_schedule(a, s):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="sc-sandbox", description="Meshyard: offline game asset browser, sandbox and 3D-print exporter")
+    p = argparse.ArgumentParser(prog="meshyard", description="Meshyard: offline game asset browser, sandbox and 3D-print exporter")
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="cmd", required=True)
 

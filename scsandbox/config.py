@@ -2,10 +2,12 @@
 
 Everything the toolkit writes lives under one home folder:
 
-    %LOCALAPPDATA%\\sc-sandbox        (Windows)
-    ~/.local/share/sc-sandbox        (elsewhere)
+    %LOCALAPPDATA%\\Meshyard        (Windows)
+    ~/.local/share/meshyard          (elsewhere)
 
-Override it with the SCSANDBOX_HOME environment variable.
+The folder used to be called sc-sandbox; home() moves it over the first time.
+
+Override it with the MESHYARD_HOME environment variable.
 
     settings.json                    user settings (tool paths, install roots, defaults)
     tools/<tool>/                    downloaded helper tools (StarBreaker, cgf-converter)
@@ -98,14 +100,50 @@ DEFAULTS: dict = {
 }
 
 
+# The folder's name before the rename. Its contents move to the new folder the
+# first time the new name is used.
+_OLD_NAME = "sc-sandbox"
+_migrated: Path | bool = False
+
+
+def _migrate(new: Path) -> Path:
+    """Move the old data folder to `new` once, fixing paths saved in its settings.
+    If the move can't happen yet (a file in it is open), keep using the old folder."""
+    old = new.parent / _OLD_NAME
+    if new.exists() or not old.is_dir():
+        return new
+    try:
+        old.rename(new)
+    except OSError:
+        return old
+    for name in ("settings.json", "desktop.json"):
+        f = new / name
+        try:
+            text = f.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for a, b in ((str(old), str(new)), (json.dumps(str(old))[1:-1], json.dumps(str(new))[1:-1])):
+            text = text.replace(a, b)
+        try:
+            f.write_text(text, encoding="utf-8")
+        except OSError:
+            pass
+    return new
+
+
 def home() -> Path:
-    env = os.environ.get("SCSANDBOX_HOME")
+    global _migrated
+    env = os.environ.get("MESHYARD_HOME") or os.environ.get("SCSANDBOX_HOME")
     if env:
         p = Path(env)
-    elif sys.platform == "win32":
-        p = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "sc-sandbox"
     else:
-        p = Path.home() / ".local" / "share" / "sc-sandbox"
+        if sys.platform == "win32":
+            p = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Meshyard"
+        else:
+            p = Path.home() / ".local" / "share" / "meshyard"
+        if _migrated is False:
+            _migrated = _migrate(p)  # once per process: the folder this run uses
+        p = _migrated
     p.mkdir(parents=True, exist_ok=True)
     return p
 

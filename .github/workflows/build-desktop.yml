@@ -29,11 +29,11 @@ jobs:
       - name: Build the engine, the WinUI 3 app and the bundled tools (packaging/build_exe.ps1)
         shell: pwsh
         run: |
-          $env:SCSANDBOX_HOME = "$env:RUNNER_TEMP\sc-home"
+          $env:MESHYARD_HOME = "$env:RUNNER_TEMP\sc-home"
           ./packaging/build_exe.ps1 -Python python -Name Meshyard
           # builds before 1.7.0 only update from a file with the old name
           Copy-Item dist/Meshyard.exe dist/SC-Asset-Browser.exe
-          Get-Content "$env:SCSANDBOX_HOME\self-test.log"
+          Get-Content "$env:MESHYARD_HOME\self-test.log"
       - uses: actions/upload-artifact@v4
         with:
           name: Meshyard

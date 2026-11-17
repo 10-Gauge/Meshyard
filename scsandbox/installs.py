@@ -273,5 +273,5 @@ def pick(channel: str | None, settings: dict) -> Install:
     have = ", ".join(i.channel for i in installs) or "none"
     raise SystemExit(
         f"No {channel} build found (found: {have}). Add the game's folder with:\n"
-        f'  sc-sandbox config add-root "D:\\Games\\<game folder>"'
+        f'  meshyard config add-root "D:\\Games\\<game folder>"'
     )

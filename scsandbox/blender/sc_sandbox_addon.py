@@ -8,7 +8,7 @@ bl_info = {
     "category": "Import-Export",
 }
 
-# Talks to the local asset browser (`sc-sandbox serve`), which does the
+# Talks to the local asset browser (`meshyard serve`), which does the
 # extraction. Nothing here touches the network beyond 127.0.0.1.
 
 import json
@@ -150,7 +150,7 @@ def spawn_path(path, label):
     if not path.lower().endswith("scene.json"):
         return import_glb(path, label)
     if not starbreaker_ready():
-        raise RuntimeError("Animated spawns need the StarBreaker add-on: run  sc-sandbox blender install")
+        raise RuntimeError("Animated spawns need the StarBreaker add-on: run  meshyard blender install")
     blend = os.path.join(os.path.dirname(path), "scene.blend")
     if os.path.isfile(blend):
         return append_package_scene(blend, label)
@@ -232,8 +232,8 @@ def run_search(st):
     try:
         d = call("/api/assets?" + urllib.parse.urlencode(params))
     except Exception as e:
-        st.status = "Asset browser not running: start it with  sc-sandbox serve"
-        return f"Asset browser not reachable at {prefs().server} ({e}). Run: sc-sandbox serve"
+        st.status = "Asset browser not running: start it with  meshyard serve"
+        return f"Asset browser not reachable at {prefs().server} ({e}). Run: meshyard serve"
     st.results.clear()
     for a in d["items"]:
         r = st.results.add()
@@ -395,7 +395,7 @@ class SC_OT_spawn(bpy.types.Operator):
         r = st.results[st.index]
         try:
             if self.animated and not starbreaker_ready():
-                raise RuntimeError("Animated spawns need the StarBreaker add-on: run  sc-sandbox blender install")
+                raise RuntimeError("Animated spawns need the StarBreaker add-on: run  meshyard blender install")
             variant = "animated" if self.animated else "full"
             job = call("/api/model", {"channel": st.channel, "id": r.asset_id, "variant": variant})["job"]
         except Exception as e:
