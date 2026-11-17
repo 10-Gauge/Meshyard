@@ -366,7 +366,7 @@ def _posed(inst, settings, asset, variant, gear_up, weapons, log, vtol=False, fl
 
 
 PRINT_OPTS = {"size_mm": float, "scale": float, "mode": str, "voxel_mm": float, "format": str, "nozzle_mm": float,
-              "min_feature_nozzles": float, "thicken": bool, "hollow_mm": float, "tilt_deg": float,
+              "min_feature_nozzles": float, "thicken": bool, "hollow_mm": float, "tilt_deg": float, "roll_deg": float,
               "stand": str, "stand_height_mm": float, "part_overrides": dict,
               "stand_shape": str, "stand_text": lambda v: str(v)[:60], "stand_text2": lambda v: str(v)[:60],
               "stand_scale": bool, "stand_forward_mm": float, "stand_side_mm": float, "paint_colors": int,

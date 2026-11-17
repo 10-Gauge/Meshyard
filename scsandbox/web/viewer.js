@@ -175,10 +175,12 @@ export function createViewer(el, { onMessage } = {}) {
   // stand view the whole stand is drawn as the export builds it (base, post, at the
   // stand height) and the ship is turned onto it, display angle and all.
   let peg = null, floorY = 0, pendingPeg = null, lastPeg = null, standView = false, restPos = null;
-  const STAND_COLOR = 0x5d636b;
+  const STAND_COLOR = 0x5d636b, FRONT_COLOR = 0xc9ced6;
   function setStandView(on) {
+    const was = standView;
     standView = !!on;
     if (!loading) setPeg(lastPeg);
+    if (was && !standView) resetView();
   }
   function unturn() {
     if (!current || !restPos) return;
@@ -242,11 +244,18 @@ export function createViewer(el, { onMessage } = {}) {
       const c = p.base.corners.map(v);            // 4 bottom corners, then 4 top
       const sx = c[1].clone().sub(c[0]), sy = c[3].clone().sub(c[0]), sz = c[4].clone().sub(c[0]);
       const box = new THREE.Mesh(new THREE.BoxGeometry(sx.length(), sz.length(), sy.length()), mat);
-      const basis = new THREE.Matrix4().makeBasis(sx.clone().normalize(), sz.clone().normalize(), sy.clone().normalize());
+      const basis = new THREE.Matrix4().makeBasis(sx.clone().normalize(), sz.clone().normalize(), sy.clone().normalize().negate());
       box.quaternion.setFromRotationMatrix(basis);
       box.position.copy(c[0]).add(c[6]).multiplyScalar(0.5);
       peg.add(box);
       baseBottom = c[0].clone().add(c[2]).multiplyScalar(0.5);
+      // the front edge (where the name plate goes) in a lighter strip
+      const fw = sx.length(), ft = sz.length(), strip = Math.max(sy.length() * 0.06, p.post_r * 0.5);
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(fw * 1.002, ft * 1.01, strip),
+        new THREE.MeshStandardMaterial({ color: FRONT_COLOR, roughness: 0.5 }));
+      edge.quaternion.copy(box.quaternion);
+      edge.position.copy(c[0]).add(c[5]).multiplyScalar(0.5).addScaledVector(sy.clone().normalize(), strip / 2 - strip * 0.01);
+      peg.add(edge);
     } else {
       const b = v(p.base.bottom), t = v(p.base.top);
       const disc = new THREE.Mesh(new THREE.CylinderGeometry(p.base.r, p.base.r * 1.02, b.distanceTo(t), 64), mat);
@@ -254,14 +263,48 @@ export function createViewer(el, { onMessage } = {}) {
       disc.position.copy(b).add(t).multiplyScalar(0.5);
       peg.add(disc);
       baseBottom = b;
+      // a tab on the front edge
+      if (p.axes) {
+        const front = new THREE.Vector3(...p.axes.y).normalize().negate();
+        const tab = new THREE.Mesh(new THREE.BoxGeometry(p.base.r * 0.5, b.distanceTo(t) * 1.04, p.base.r * 0.12),
+          new THREE.MeshStandardMaterial({ color: FRONT_COLOR, roughness: 0.5 }));
+        tab.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+          up.clone().cross(front).normalize(), up, front));
+        tab.position.copy(b).add(t).multiplyScalar(0.5).addScaledVector(front, p.base.r * 0.98);
+        peg.add(tab);
+      }
     }
-    peg.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    if (p.axes) {
+      // "FRONT" on the floor in front of the base
+      const front = new THREE.Vector3(...p.axes.y).normalize().negate();
+      const span = p.base.shape === "rect" ? new THREE.Vector3(...p.base.corners[1]).distanceTo(new THREE.Vector3(...p.base.corners[0]))
+                                           : p.base.r * 2;
+      const label = textLabel("FRONT", span * 0.1);
+      const reach = p.base.shape === "rect" ? new THREE.Vector3(...p.base.corners[3]).distanceTo(new THREE.Vector3(...p.base.corners[0])) / 2
+                                            : p.base.r;
+      // lying on the floor in front of the base, reading left to right from the front
+      const upz = new THREE.Vector3(...p.axes.z).normalize(), right = new THREE.Vector3(...p.axes.x).normalize();
+      label.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, front.clone().negate(), upz));
+      label.position.copy(baseBottom).addScaledVector(front, reach + span * 0.1).addScaledVector(upz, span * 0.002);
+      peg.add(label);
+    }
+    peg.traverse((o) => { if (o.isMesh && !o.material.map) { o.castShadow = true; o.receiveShadow = true; } });
     current.add(peg);
-    // turn the ship so "down" in print space is down on screen, base centre on the floor
-    current.quaternion.setFromUnitVectors(down, new THREE.Vector3(0, -1, 0));
+    // turn the ship onto the stand as printed and face the stand's front: the stand's
+    // right (the nose side) to screen right, its up to screen up, its front toward you
+    if (p.axes) {
+      const ax = v(p.axes.x).normalize(), ay = v(p.axes.y).normalize(), az = v(p.axes.z).normalize();
+      const toModel = new THREE.Matrix4().makeBasis(ax, az, ay.negate());
+      current.quaternion.setFromRotationMatrix(toModel).invert();
+    } else {
+      current.quaternion.setFromUnitVectors(down, new THREE.Vector3(0, -1, 0));
+    }
     current.position.set(0, 0, 0).sub(baseBottom.clone().applyQuaternion(current.quaternion));
     current.updateMatrixWorld(true);
-    controls.target.copy(tightBox(current).getCenter(new THREE.Vector3()));
+    const tb = tightBox(current), ctr = tb.getCenter(new THREE.Vector3()), sz = tb.getSize(new THREE.Vector3());
+    const r = Math.max(sz.x, sz.y, sz.z) || 1;
+    controls.target.copy(ctr);
+    if (p.axes) camera.position.set(ctr.x + r * 0.15, ctr.y + r * 0.35, ctr.z + r * 1.7);  // from the front, a little above
     controls.update();
     renderer.shadowMap.needsUpdate = true;
     redraw();
@@ -273,6 +316,22 @@ export function createViewer(el, { onMessage } = {}) {
   }
 
   renderer.domElement.addEventListener("dblclick", resetView);  return { show, clear, resetView, setTheme, message, setPeg, setStandView, get loaded() { return !!current; } };
+}
+
+// A flat text label (stand view: which side is the front), height in model units.
+function textLabel(text, height) {
+  const c = document.createElement("canvas");
+  c.width = 512; c.height = 128;
+  const g = c.getContext("2d");
+  g.font = "bold 92px Segoe UI, Arial, sans-serif";
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillStyle = "#e8ebef";
+  g.fillText(text, 256, 68);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(height * 4, height),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  return m;
 }
 
 const MERGE_MIN_MESHES = 300;

@@ -88,6 +88,7 @@ public sealed partial class Inspector : UserControl
         PegFwdBox.Value = 0;
         PegSideBox.Value = 0;
         TiltBox.Value = p.Num("tilt_deg", 0);
+        RollBox.Value = p.Num("roll_deg", 0);
         HollowBox.Value = p.Num("hollow_mm", 0);
         ThickenSwitch.IsOn = p.Bool("thicken", true);
         Pick(ModeBox, p.Str("mode", "solid"));
@@ -408,6 +409,16 @@ public sealed partial class Inspector : UserControl
     CancellationTokenSource? _pegCts;
     int _pegSeq;
 
+    // how the ship sits on the stand, in words (the stand view shows it from the front)
+    static string StandLine(JsonNode r)
+    {
+        double inc = r["incline"]?.GetValue<double>() ?? 0, tilt = r["tilt"]?.GetValue<double>() ?? 0;
+        string pitch = inc == 0 ? "level" : $"nose {(inc > 0 ? "up" : "down")} {Math.Abs(inc):0}°";
+        string bank = tilt == 0 ? "wings level"
+            : $"{(tilt > 0 ? "right wing down (toward you)" : "left wing down (away from you)")} {Math.Abs(tilt):0}°";
+        return $"Seen from the stand's front (the light edge): nose to the right, {pitch}, {bank}.";
+    }
+
     async void RefreshPeg(int delayMs = 600)
     {
         var s = _state;
@@ -432,7 +443,7 @@ public sealed partial class Inspector : UserControl
             if (seq != _pegSeq || s.Selected != t) return;
             var shown = r["top"] != null;
             await s.Viewer.Peg(shown ? r : null);
-            PegNote.Text = shown ? "The peg is shown in orange in the viewer." : "";
+            PegNote.Text = shown ? "The peg is shown in orange in the viewer. " + StandLine(r) : "";
         }
         catch
         {
@@ -460,7 +471,7 @@ public sealed partial class Inspector : UserControl
             ["size_mm"] = Safe(SizeBox.Value), ["voxel_mm"] = Safe(VoxelBox.Value), ["nozzle_mm"] = Safe(NozzleBox.Value),
             ["min_feature_nozzles"] = Safe(MinNBox.Value), ["stand_height_mm"] = Safe(StandHBox.Value),
             ["stand_forward_mm"] = Safe(PegFwdBox.Value), ["stand_side_mm"] = Safe(PegSideBox.Value),
-            ["tilt_deg"] = Safe(TiltBox.Value), ["hollow_mm"] = Safe(HollowBox.Value),
+            ["tilt_deg"] = Safe(TiltBox.Value), ["roll_deg"] = Safe(RollBox.Value), ["hollow_mm"] = Safe(HollowBox.Value),
             ["paint_colors"] = Picked(FormatBox) == "3mf" && int.TryParse(Picked(ColorsBox), out var nc) ? nc : 0,
         };
         // a scale the user chose wins, so every model comes out at that scale

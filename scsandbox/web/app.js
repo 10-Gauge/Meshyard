@@ -42,7 +42,7 @@ function refreshPeg(delay = 0) {
       trackJob(job, (r) => {
         if (seq !== pegSeq || state.selected !== a) return;
         viewer.setPeg(r.top ? r : null);
-        $("p-pegnote").textContent = r.top ? "Peg shown in orange in the viewer." : "";
+        $("p-pegnote").textContent = r.top ? "Peg shown in orange in the viewer. " + standLine(r) : "";
       }, () => { if (seq === pegSeq) $("p-pegnote").textContent = ""; });
     } catch (e) { $("p-pegnote").textContent = ""; }
   }, delay);
@@ -294,7 +294,7 @@ $("b-spawn-anim").onclick = () => loadModel("animated", true);
 
 // ---------- print export ----------
 const PRINT_FIELDS = { size_mm: "p-size", voxel_mm: "p-voxel", nozzle_mm: "p-nozzle", min_feature_nozzles: "p-minn",
-  stand_height_mm: "p-standh", tilt_deg: "p-tilt", hollow_mm: "p-hollow",
+  stand_height_mm: "p-standh", tilt_deg: "p-tilt", roll_deg: "p-roll", hollow_mm: "p-hollow",
   stand_forward_mm: "p-standfwd", stand_side_mm: "p-standside" };
 function applyPrintDefaults(p) {
   for (const [k, id] of Object.entries(PRINT_FIELDS)) if (p[k] != null) $(id).value = p[k];
@@ -318,7 +318,7 @@ function updateMinMm() {
 }
 for (const id of ["p-nozzle", "p-minn", "p-stand", "p-standshape"]) $(id).addEventListener("input", updateMinMm);
 // settings that move the peg: show where it goes now
-for (const id of ["p-stand", "p-standfwd", "p-standside", "p-size", "p-tilt", "p-standh", "p-standshape", "p-standtext", "p-standtext2"])
+for (const id of ["p-stand", "p-standfwd", "p-standside", "p-size", "p-tilt", "p-roll", "p-standh", "p-standshape", "p-standtext", "p-standtext2"])
   $(id).addEventListener("input", () => refreshPeg(600));
 $("p-standview").addEventListener("change", () => viewer.setStandView($("p-standview").checked));
 
@@ -608,3 +608,12 @@ select = function (a, li) {
 };
 
 loadInstalls().catch((e) => showEmpty("Could not reach the toolkit: " + e.message));
+
+// how the ship sits on the stand, in words (the stand view shows it from the front)
+function standLine(r) {
+  const deg = (v) => Math.abs(Math.round(+v || 0));
+  const inc = +r.incline || 0, tilt = +r.tilt || 0;
+  return "Seen from the stand's front (the light edge): nose to the right, " +
+    (inc ? `nose ${inc > 0 ? "up" : "down"} ${deg(inc)}°` : "level") + ", " +
+    (tilt ? `${tilt > 0 ? "right wing down (toward you)" : "left wing down (away from you)"} ${deg(tilt)}°` : "wings level") + ".";
+}

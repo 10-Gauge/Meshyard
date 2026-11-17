@@ -346,17 +346,21 @@ def test_a_gun_beside_its_turret_is_joined_to_the_model():
 def test_stand_peg_stays_off_a_fin_and_can_be_moved():
     """The Stingray's bottom fin hangs under its center of mass: the post must not go
     through it, and the user can move the peg along the ship."""
-    g = printprep.Grid([0, 0, 0], [60, 120, 30], 0.5, pad=2)
-    g.v[10:110, 20:220, 30:50] = True       # belly slab, 10 mm thick
-    g.v[58:62, 80:160, 6:30] = True         # thin fin hanging 12 mm under the middle
+    # posed nose-right: the ship's length runs along x, its right side toward -y
+    g = printprep.Grid([0, 0, 0], [120, 60, 30], 0.5, pad=2)
+    g.v[20:220, 10:110, 30:50] = True       # belly slab, 10 mm thick
+    g.v[80:160, 58:62, 6:30] = True         # thin fin hanging 12 mm under the middle
     opts = printprep.PrintOptions(size_mm=120, stand="peg")
     s = printprep.plan_stand(g, opts, log=lambda *_: None)
-    fin_x = g.origin[0] + 60 * g.pitch
-    assert abs(s.x - fin_x) > s.post_r + 0.5          # the post clears the fin
+    fin_y = g.origin[1] + 60 * g.pitch
+    assert abs(s.y - fin_y) > s.post_r + 0.5          # the post clears the fin
     assert s.top_z > g.origin[2] + 25 * g.pitch       # it meets the belly, not the fin's edge
     moved = printprep.plan_stand(g, printprep.PrintOptions(size_mm=120, stand="peg", stand_forward_mm=-30),
                                  log=lambda *_: None)
-    assert moved.y < s.y - 20                         # toward the tail
+    assert moved.x < s.x - 20                         # toward the tail
+    right = printprep.plan_stand(g, printprep.PrintOptions(size_mm=120, stand="peg", stand_side_mm=15),
+                                 log=lambda *_: None)
+    assert right.y < s.y                              # toward the right wing (the stand's front)
 
 
 def test_solid_glow_trim_prints_but_flat_glow_sheets_do_not(tmp_path):
@@ -451,3 +455,22 @@ def test_closest_filament_names_a_bambu_color():
     assert printprep.closest_filament("#FEFEFE") == "Jade White"
     assert printprep.closest_filament("#8a8c8e") == "Gray"
     assert printprep.closest_filament("#c02a20") == "Red"
+
+
+def test_ships_face_nose_right_and_incline_and_tilt_about_the_stand():
+    """Nose (+y once Z-up, -z in the export) ends at +x, the right wing (+x in the
+    export) toward the stand's front (-y); incline lifts the nose, tilt drops the right wing."""
+    def posed(**kw):
+        body = trimesh.creation.box((2, 1, 10))          # glTF: long along z, nose at -z
+        nose = trimesh.creation.box((0.5, 0.5, 0.5)).apply_translation((0, 0, -6))
+        wing = trimesh.creation.box((0.5, 0.5, 0.5)).apply_translation((3, 0, 0))   # right wing
+        parts = [("body", body), ("nose", nose), ("wing", wing)]
+        printprep._orient_and_scale(parts, 100, kw.get("tilt", 0), 0, kw.get("roll", 0))
+        return {n: m.centroid for n, m in parts}
+    p = posed()
+    assert p["nose"][0] > p["body"][0] + 10 and abs(p["nose"][1] - p["body"][1]) < 1
+    assert p["wing"][1] < p["body"][1] - 5
+    up = posed(tilt=20)
+    assert up["nose"][2] > up["body"][2] + 5
+    bank = posed(roll=20)
+    assert bank["wing"][2] < bank["body"][2] - 3

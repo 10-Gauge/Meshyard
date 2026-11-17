@@ -49,6 +49,10 @@ import numpy as np
 import trimesh
 
 Y_UP_TO_Z_UP = trimesh.transformations.rotation_matrix(math.pi / 2, [1, 0, 0])
+# The ship on its stand: nose to +x (the right, seen from the stand's front, the -y
+# side with the name plate), right wing toward the front (-y), top up (+z). The export
+# has the nose along +y once turned Z-up.
+NOSE_RIGHT = trimesh.transformations.rotation_matrix(-math.pi / 2, [0, 0, 1])
 PRINT_FORMATS = ("3mf", "stl", "obj", "ply")
 # Gaps in the hull up to about twice this (at print scale) are sealed before filling.
 SEAL_MM = 0.8
@@ -117,7 +121,8 @@ class PrintOptions:
     # per-part choices from the "find thin parts" list: {part name: {"action": "remove"|"thicken"|"auto", "mm": 1.5}}
     part_overrides: dict = field(default_factory=dict)
     hollow_mm: float = 0.0          # 0 = solid; resin prints usually use 1.5-2.5
-    tilt_deg: float = 0.0           # display angle (nose up/down)
+    tilt_deg: float = 0.0           # incline: nose up (+) or down (-)
+    roll_deg: float = 0.0           # tilt: right wing down (+, toward the stand's front) or left (-)
     stand: str = "none"             # none | peg (separate stand, socket in model) | attached
     stand_height_mm: float = 30.0   # gap between the stand's base and the model
     stand_shape: str = "round"      # round | rect (rectangular base with a text plate)
@@ -452,18 +457,24 @@ def real_size(parts) -> list[float]:
     return [float(ex[0]), float(ex[2]), float(ex[1])]  # Y-up input
 
 
-def _orient_and_scale(parts, size_mm: float, tilt_deg: float = 0.0, ratio: float = 0.0) -> float:
-    """Turn the model Z-up and size it. ratio is the N of a 1:N scale; without one the
-    longest side becomes size_mm. Returns the scale in mm per game meter."""
+def _orient_and_scale(parts, size_mm: float, tilt_deg: float = 0.0, ratio: float = 0.0,
+                      roll_deg: float = 0.0, nose_right: bool = True) -> float:
+    """Turn the model Z-up with its nose to +x (see NOSE_RIGHT), tilt it (roll_deg about
+    its length, right wing down for positive) and incline it (tilt_deg, nose up for
+    positive), then size it. ratio is the N of a 1:N scale; without one the longest side
+    becomes size_mm. Characters (nose_right False) keep facing the stand's front.
+    Returns the scale in mm per game meter."""
+    turn = NOSE_RIGHT @ Y_UP_TO_Z_UP if nose_right else Y_UP_TO_Z_UP
     for _, m in parts:
-        m.apply_transform(Y_UP_TO_Z_UP)
+        m.apply_transform(turn)
     lo, hi = _bounds(parts)
-    if tilt_deg:
-        # Tilt about the horizontal axis across the model's length (nose up for positive angles
-        # when the nose points to +Y/+X; use a negative angle if it tips the wrong way).
-        length_axis = 1 if (hi - lo)[1] >= (hi - lo)[0] else 0
-        axis = [1, 0, 0] if length_axis == 1 else [0, -1, 0]
-        rot = trimesh.transformations.rotation_matrix(math.radians(tilt_deg), axis, (lo + hi) / 2)
+    c = (lo + hi) / 2
+    rot = np.eye(4)
+    if roll_deg:   # about the nose axis: +x
+        rot = trimesh.transformations.rotation_matrix(math.radians(roll_deg), [1, 0, 0], c) @ rot
+    if tilt_deg:   # about the stand's left-right axis: nose (+x) up for positive
+        rot = trimesh.transformations.rotation_matrix(math.radians(-tilt_deg), [0, 1, 0], c) @ rot
+    if roll_deg or tilt_deg:
         for _, m in parts:
             m.apply_transform(rot)
         lo, hi = _bounds(parts)
@@ -527,7 +538,8 @@ def analyze(glb: Path, opts: PrintOptions) -> dict:
     """What the print would look like before running it: size, scale and the slender parts."""
     parts = load_parts(Path(glb), opts.exclude_nodes)
     real = real_size(parts)
-    scale = _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale)
+    scale = _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale, opts.roll_deg,
+                              not opts.figure)
     lo, hi = _bounds(parts)
     return {"parts": len(parts), "scale": _scale_text(scale), "size_mm": [round(float(x), 1) for x in hi - lo],
             "real_m": [round(x, 2) for x in real],
@@ -587,7 +599,8 @@ def peg_preview(glb: Path, opts: PrintOptions, log=print) -> dict:
     probe = np.array([c, c + [0.01, 0, 0], c + [0, 0.01, 0], c + [0, 0, 0.01]])
     marker = trimesh.Trimesh(vertices=probe.copy(), faces=[[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]], process=False)
     parts.append(("__peg_probe__", marker))
-    _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale)
+    _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale, opts.roll_deg,
+                              not opts.figure)
     moved = np.asarray(parts.pop()[1].vertices, float)
     if opts.scale > 0:
         plo, phi = _bounds(parts)
@@ -620,7 +633,12 @@ def peg_preview(glb: Path, opts: PrintOptions, log=print) -> dict:
     else:
         base = {"shape": "round", "bottom": r4(model([spec.x, spec.y, base_bottom_z])),
                 "top": r4(model([spec.x, spec.y, post_bottom_z])), "r": round(spec.base_r * mm, 4)}
-    return {"stand": opts.stand, "top": r4(top),
+    # the stand's own axes in model coordinates, so the viewer can show it square on:
+    # x toward the nose (the stand's right), y toward the stand's back, z up
+    axes = {k: r4(to_model @ e / np.linalg.norm(to_model @ e)) for k, e in
+            (("x", np.array([1.0, 0, 0])), ("y", np.array([0, 1.0, 0])), ("z", np.array([0, 0, 1.0])))}
+    return {"stand": opts.stand, "top": r4(top), "axes": axes,
+            "incline": opts.tilt_deg, "tilt": opts.roll_deg,
             "peg_r": round(spec.peg_r * mm, 4), "post_r": round(spec.post_r * mm, 4),
             "depth": round(spec.peg_depth * mm, 4),
             "down": r4(to_model @ np.array([0, 0, -1.0]) / mm),
@@ -1032,9 +1050,9 @@ def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
         raise ValueError("Nothing to put on a stand")
     # Evaluate a window of columns around the center of mass (cheap and stable).
     rad = int(math.ceil(max(g.shape[:2]) * 0.25))
-    # model axes after posing: +y is the nose, +x the right side
-    cx = int(np.clip(com[0] + opts.stand_side_mm / g.pitch, 0, g.shape[0] - 1))
-    cy = int(np.clip(com[1] + opts.stand_forward_mm / g.pitch, 0, g.shape[1] - 1))
+    # model axes after posing (NOSE_RIGHT): +x is the nose, -y the right side
+    cx = int(np.clip(com[0] + opts.stand_forward_mm / g.pitch, 0, g.shape[0] - 1))
+    cy = int(np.clip(com[1] - opts.stand_side_mm / g.pitch, 0, g.shape[1] - 1))
     # how far the underside rises within the post's footprint: small on a broad belly,
     # large under a thin fin or keel (the post would only touch its edge)
     rp = max(1, int(round(post_r / g.pitch)))
@@ -1469,7 +1487,8 @@ def prepare(glb: Path, out: Path, opts: PrintOptions, log=print) -> dict:
     parts = load_parts(glb, opts.exclude_nodes)
     log(f"  {len(parts)} parts loaded")
     real = real_size(parts)
-    scale = _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale)
+    scale = _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale, opts.roll_deg,
+                              not opts.figure)
     if opts.scale > 0:  # stand and peg sizes follow the printed size
         lo, hi = _bounds(parts)
         opts = replace(opts, size_mm=float(np.max(hi - lo)))

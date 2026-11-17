@@ -187,14 +187,18 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <ComboBox x:Name="ShapeBox" Header="Base" HorizontalAlignment="Stretch" SelectionChanged="Stand_Changed" />
                             <NumberBox x:Name="StandHBox" Grid.Column="1" Header="Stand height (mm)" Minimum="5" Maximum="300" SmallChange="5"
                                        SpinButtonPlacementMode="Compact" ValueChanged="Peg_Changed" />
-                            <NumberBox x:Name="TiltBox" Grid.Row="1" Header="Display angle (°)" Minimum="-45" Maximum="45" SmallChange="5"
+                            <NumberBox x:Name="TiltBox" Grid.Row="1" Header="Incline (°)" Minimum="-45" Maximum="45" SmallChange="5"
                                        SpinButtonPlacementMode="Compact" ValueChanged="Peg_Changed"
-                                       ToolTipService.ToolTip="Tilts the nose up (negative tilts it down)" />
-                            <NumberBox x:Name="HollowBox" Grid.Row="1" Grid.Column="1" Header="Hollow walls (mm)" Minimum="0" Maximum="10"
+                                       ToolTipService.ToolTip="Nose up (negative: nose down). The nose points to the right of the stand, seen from the front." />
+                            <NumberBox x:Name="RollBox" Grid.Row="1" Grid.Column="1" Header="Tilt (°)" Minimum="-60" Maximum="60" SmallChange="5"
+                                       SpinButtonPlacementMode="Compact" ValueChanged="Peg_Changed"
+                                       ToolTipService.ToolTip="Banks the ship: right wing down, toward the front of the stand (negative: left wing down, away from the front)" />
+                            <NumberBox x:Name="HollowBox" Grid.Row="3" Header="Hollow walls (mm)" Minimum="0" Maximum="10"
                                        SmallChange="0.5" SpinButtonPlacementMode="Compact"
                                        ToolTipService.ToolTip="For resin: leaves walls this thick. 0 keeps it solid." />
                             <NumberBox x:Name="PegFwdBox" Grid.Row="2" Header="Peg forward (mm)" Minimum="-500" Maximum="500" SmallChange="2"
@@ -206,7 +210,7 @@
                         </Grid>
                         <ToggleSwitch x:Name="StandViewSwitch" Header="Show on stand" OnContent="On" OffContent="Off"
                                       Toggled="StandView_Toggled"
-                                      ToolTipService.ToolTip="Shows the ship in the viewer on the stand these settings make: base, post, height and display angle" />
+                                      ToolTipService.ToolTip="Shows the ship in the viewer on the stand these settings make, seen from the stand's front: base, post, height, incline and tilt" />
                         <TextBlock x:Name="PegNote" Style="{StaticResource Secondary}" TextWrapping="Wrap" />
                         <TextBox x:Name="PlateText" Header="Name plate text" MaxLength="60" PlaceholderText="Ship name" />
                         <TextBox x:Name="PlateText2" Header="Second line (optional, smaller)" MaxLength="60"
