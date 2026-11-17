@@ -35,6 +35,11 @@ If you have LIVE and PTU installed, switch between them with the box at the top.
 For ships there are two switches in the panel on the right:
 
 - **Landing gear** shows the ship with its gear up and the gear doors shut, taken from the ship's own retract animation. The first time you do it for a ship it takes 10 to 30 seconds; after that it's instant. Ships that change shape on the ground show that shape with the gear down: the Eclipse, Stingray, Talon, Vanguard and Zeus fold their wings, the Clipper stands on its wings, and the Mole, Moth, Golem, Pitbull, Apollo, Hermes and others move engines or wings with their gear. The shape shows once you've raised the gear on that ship once.
+
+![An Aegis Gladius in the 3D view with its landing gear down, seen from the front](docs/images/gladius-gear-down.png)
+
+*An Aegis Gladius in its stock paint with the landing gear down.*
+
 - **Weapons** shows deployable guns out, like the cannon pods on the Alpha Wolf or the guns and missile racks on the M80. Ships with fixed guns just say so.
 - **VTOL mode** swings the thrusters down for vertical flight, like the Starlifter's wing nacelles, the Paladin or the Golem. Ships without one just say so.
 - **Flight mode** shows ships that fly in a different shape: the Stingray draws its wings in and stands its wingtip fins up, the Reliant stands its wings upright and the Corsair spreads them.
@@ -67,6 +72,11 @@ Some other options worth knowing:
 - **Base width** and **Base depth** set the base size (0 sizes it from the model). **Posts** adds a second post, fore and aft, for long or heavy prints. The note under the stand settings says how far the ship's balance point sits inside the base edge, and warns if it would tip over.
 - With **Paint colors** on, **Base color**, **Logo color**, **Text color** and **Second line color** pick the stand's filaments from the Bambu PLA Basic colors. They're added to the 3MF's filament list, reusing a ship color that matches.
 - **Incline** lifts the nose (negative dips it). **Tilt** banks the ship: positive drops the right wing toward the front of the stand, negative drops the left wing away from it. The socket still comes out full depth at any angle.
+
+![A Kruger L-22 Alpha Wolf on its stand in the 3D view, seen from the stand's front: landing gear up, weapons deployed, a black rectangular base with the Kruger logo and the ship's name in white, inclined 10 degrees and tilted 15 degrees](docs/images/alpha-wolf-stand.png)
+
+*Show on stand: a Kruger L-22 Alpha Wolf with its gear up and weapons deployed, on a black name plate base with the logo and name in white, at 10° incline and 15° tilt.*
+
 - **Hollow walls** for resin prints. Remember to add drain holes in your slicer.
 - **Separate parts (kit)** gives you every part as its own body instead of one solid, for painting or building it up like a model kit.
 
