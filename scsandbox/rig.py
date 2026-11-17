@@ -846,6 +846,16 @@ def build_pose(rig: Rig, pose: str, weapon: Weapon | None, back_z: float, clips:
             thigh = p.pos("RightUpLeg")
             M_w = weapon.placement(np.array([0, -1.0, 0]), np.array([0, 0, -1.0]), weapon.center,
                                    [thigh[0] + 0.12, thigh[1] - 0.17, thigh[2] + 0.01])
+        elif weapon is not None and weapon.kind in ("shouldered", "heavy"):
+            # large special weapons (the Scourge railgun, launchers) hang the other way up:
+            # muzzle at the right shoulder, stock toward the ground, on the right of the back
+            fwd = np.array([0.0, 1.0, 0.0])
+            side_up = np.cross([0, 0, 1.0], fwd)
+            M_w = weapon.placement(fwd, side_up, weapon.center, [0.10, 1.0, back_z])
+            y = (weapon.mesh.vertices @ M_w[:3, :3].T + M_w[:3, 3])[:, 1]
+            M_w[1, 3] += p.pos("Neck")[1] + 0.02 - float(y.max())   # muzzle level with the shoulders
+            z = (weapon.mesh.vertices @ M_w[:3, :3].T + M_w[:3, 3])[:, 2]
+            M_w[2, 3] += back_z + 0.005 - float(np.percentile(z, 3))
         elif weapon is not None:
             # on the back as the game carries it: straight down the spine, stock at the top
             # and barrel toward the floor, lying on its side, then moved in until it rests
