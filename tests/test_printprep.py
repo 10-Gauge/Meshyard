@@ -346,17 +346,21 @@ def test_a_gun_beside_its_turret_is_joined_to_the_model():
 def test_stand_peg_stays_off_a_fin_and_can_be_moved():
     """The Stingray's bottom fin hangs under its center of mass: the post must not go
     through it, and the user can move the peg along the ship."""
-    g = printprep.Grid([0, 0, 0], [60, 120, 30], 0.5, pad=2)
-    g.v[10:110, 20:220, 30:50] = True       # belly slab, 10 mm thick
-    g.v[58:62, 80:160, 6:30] = True         # thin fin hanging 12 mm under the middle
+    # posed nose-right: the ship's length runs along x, its right side toward -y
+    g = printprep.Grid([0, 0, 0], [120, 60, 30], 0.5, pad=2)
+    g.v[20:220, 10:110, 30:50] = True       # belly slab, 10 mm thick
+    g.v[80:160, 58:62, 6:30] = True         # thin fin hanging 12 mm under the middle
     opts = printprep.PrintOptions(size_mm=120, stand="peg")
     s = printprep.plan_stand(g, opts, log=lambda *_: None)
-    fin_x = g.origin[0] + 60 * g.pitch
-    assert abs(s.x - fin_x) > s.post_r + 0.5          # the post clears the fin
+    fin_y = g.origin[1] + 60 * g.pitch
+    assert abs(s.y - fin_y) > s.post_r + 0.5          # the post clears the fin
     assert s.top_z > g.origin[2] + 25 * g.pitch       # it meets the belly, not the fin's edge
     moved = printprep.plan_stand(g, printprep.PrintOptions(size_mm=120, stand="peg", stand_forward_mm=-30),
                                  log=lambda *_: None)
-    assert moved.y < s.y - 20                         # toward the tail
+    assert moved.x < s.x - 20                         # toward the tail
+    right = printprep.plan_stand(g, printprep.PrintOptions(size_mm=120, stand="peg", stand_side_mm=15),
+                                 log=lambda *_: None)
+    assert right.y < s.y                              # toward the right wing (the stand's front)
 
 
 def test_solid_glow_trim_prints_but_flat_glow_sheets_do_not(tmp_path):
@@ -445,3 +449,69 @@ def test_tiny_shells_are_dropped_after_the_surface_fit():
     out = printprep.drop_small_shells(trimesh.util.concatenate([body, wing, speck]), log=lambda *_: None)
     vols = sorted(abs(s.volume) for s in out.split(only_watertight=False))
     assert vols == pytest.approx([125, 8000])
+
+
+def test_closest_filament_names_a_bambu_color():
+    assert printprep.closest_filament("#FEFEFE") == "Jade White"
+    assert printprep.closest_filament("#8a8c8e") == "Gray"
+    assert printprep.closest_filament("#c02a20") == "Red"
+
+
+def test_ships_face_nose_right_and_incline_and_tilt_about_the_stand():
+    """Nose (+y once Z-up, -z in the export) ends at +x, the right wing (+x in the
+    export) toward the stand's front (-y); incline lifts the nose, tilt drops the right wing."""
+    def posed(**kw):
+        body = trimesh.creation.box((2, 1, 10))          # glTF: long along z, nose at -z
+        nose = trimesh.creation.box((0.5, 0.5, 0.5)).apply_translation((0, 0, -6))
+        wing = trimesh.creation.box((0.5, 0.5, 0.5)).apply_translation((3, 0, 0))   # right wing
+        parts = [("body", body), ("nose", nose), ("wing", wing)]
+        printprep._orient_and_scale(parts, 100, kw.get("tilt", 0), 0, kw.get("roll", 0))
+        return {n: m.centroid for n, m in parts}
+    p = posed()
+    assert p["nose"][0] > p["body"][0] + 10 and abs(p["nose"][1] - p["body"][1]) < 1
+    assert p["wing"][1] < p["body"][1] - 5
+    up = posed(tilt=20)
+    assert up["nose"][2] > up["body"][2] + 5
+    bank = posed(roll=20)
+    assert bank["wing"][2] < bank["body"][2] - 3
+
+
+def _long_ship_grid():
+    g = printprep.Grid([0, 0, 0], [200, 40, 30], 0.5, pad=2)
+    g.v[20:380, 20:60, 30:50] = True        # a long belly slab, 200 mm x 20 mm
+    return g
+
+
+def test_two_posts_go_fore_and_aft_and_the_base_spans_them():
+    g = _long_ship_grid()
+    s = printprep.plan_stand(g, printprep.PrintOptions(size_mm=200, stand="peg", stand_posts=2,
+                                                      stand_shape="rect"), log=lambda *_: None)
+    posts = printprep.all_posts(s)
+    assert len(posts) == 2
+    xs = sorted(p[0] for p in posts)
+    assert xs[1] - xs[0] > 60                              # well apart along the ship
+    x0, x1, _, _ = printprep._base_box(s)
+    assert x0 < xs[0] - s.post_r and x1 > xs[1] + s.post_r   # both stand on the base
+
+
+def test_base_size_override_and_balance_check():
+    g = _long_ship_grid()
+    big = printprep.plan_stand(g, printprep.PrintOptions(size_mm=200, stand="peg", stand_shape="rect",
+                                                        stand_base_w_mm=180, stand_base_d_mm=90), log=lambda *_: None)
+    assert big.base_w == 180 and big.base_d == 90 and big.balance > 0
+    small = printprep.plan_stand(g, printprep.PrintOptions(size_mm=200, stand="peg", stand_shape="round",
+                                                          stand_base_w_mm=20, stand_forward_mm=80),
+                                 log=lambda *_: None)
+    assert small.balance < 0                              # balance point off a tiny base, far from the peg
+
+
+def test_stand_faces_are_labeled_base_and_text_and_take_their_filaments():
+    s = printprep.StandSpec(0.0, 0.0, 40.0, 4.0, 2.2, 6.0, 30.0)
+    printprep._plan_rect(s, 150, 60, "STINGRAY", "Kruger")
+    m = printprep.make_stand_mesh(s, 30.0, 0.3, peg=True, smooth=True, preview=True)
+    lab = printprep.stand_face_labels(m.vertices, m.faces, s, 0.0, 30.0)
+    assert (lab == 0).sum() > (lab == 2).sum() > 0 and (lab == 3).sum() > 0 and (lab >= 0).all()
+    opts = printprep.PrintOptions(stand_base_color="#000000", stand_text_color="#E4BD68")
+    colors, slots = printprep.stand_filaments(opts, ["#8A8C8E", "#000000"])
+    assert colors == ["#8A8C8E", "#000000", "#E4BD68"]      # black reused, gold added
+    assert slots == {0: 2, 1: 2, 2: 3, 3: 2}                # logo and second line follow the base

@@ -34,10 +34,26 @@ public sealed partial class Inspector : UserControl
              ("attached", "Stand printed with the model"));
         Fill(ShapeBox, ("round", "Round"), ("rect", "Rectangle with name plate"));
         Fill(LogoBox, ("auto", "The manufacturer's logo"), ("", "No logo"));
+        Fill(PostsBox, ("1", "1"), ("2", "2 (fore and aft)"));
+        foreach (var (box, unset) in new[] { (BaseColorBox, "Filament 1"), (LogoColorBox, "Same as base"),
+                                             (TextColorBox, "Same as base"), (Text2ColorBox, "Same as base") })
+            Fill(box, new[] { ("", unset) }.Concat(Filaments).ToArray());
         state.SelectionChanged += OnSelection;
         state.InstallsLoaded += ApplyDefaults;
         state.InstallsLoaded += () => _ = LoadLogos();
     }
+
+    // the stand's filament choices (painted 3MF): Bambu Lab PLA Basic colors
+    static readonly (string Id, string Label)[] Filaments =
+    [
+        ("#FFFFFF", "Jade White"), ("#D1D3D5", "Light Gray"), ("#A6A9AA", "Silver"), ("#8E9089", "Gray"),
+        ("#545454", "Dark Gray"), ("#000000", "Black"), ("#5B6579", "Blue Gray"), ("#F7E6DE", "Beige"),
+        ("#E4BD68", "Gold"), ("#847D48", "Bronze"), ("#9D432C", "Brown"), ("#6F5034", "Cocoa Brown"),
+        ("#C12E1F", "Red"), ("#9D2235", "Maroon Red"), ("#EC008C", "Magenta"), ("#F55A74", "Pink"),
+        ("#FF6A13", "Orange"), ("#FF9016", "Pumpkin Orange"), ("#F4EE2A", "Yellow"), ("#FEC600", "Sunflower Yellow"),
+        ("#BECF00", "Bright Green"), ("#00AE42", "Bambu Green"), ("#3F8E43", "Mistletoe Green"), ("#00B1B7", "Turquoise"),
+        ("#0086D6", "Cyan"), ("#0056B8", "Cobalt Blue"), ("#0A2989", "Blue"), ("#5E43B7", "Purple"), ("#482960", "Indigo Purple"),
+    ];
 
     static void Fill(ComboBox box, params (string Id, string Label)[] items)
     {
@@ -88,6 +104,7 @@ public sealed partial class Inspector : UserControl
         PegFwdBox.Value = 0;
         PegSideBox.Value = 0;
         TiltBox.Value = p.Num("tilt_deg", 0);
+        RollBox.Value = p.Num("roll_deg", 0);
         HollowBox.Value = p.Num("hollow_mm", 0);
         ThickenSwitch.IsOn = p.Bool("thicken", true);
         Pick(ModeBox, p.Str("mode", "solid"));
@@ -95,6 +112,13 @@ public sealed partial class Inspector : UserControl
         Pick(ColorsBox, $"{p.Long("paint_colors")}");
         Pick(StandBox, p.Str("stand", "none"));
         Pick(ShapeBox, p.Str("stand_shape", "round"));
+        Pick(PostsBox, $"{Math.Max(1, p.Long("stand_posts"))}");
+        BaseWBox.Value = p.Num("stand_base_w_mm", 0);
+        BaseDBox.Value = p.Num("stand_base_d_mm", 0);
+        Pick(BaseColorBox, p.Str("stand_base_color", ""));
+        Pick(LogoColorBox, p.Str("stand_logo_color", ""));
+        Pick(TextColorBox, p.Str("stand_text_color", ""));
+        Pick(Text2ColorBox, p.Str("stand_text2_color", ""));
         UpdateStrength();
         UpdateStand();
     }
@@ -408,6 +432,23 @@ public sealed partial class Inspector : UserControl
     CancellationTokenSource? _pegCts;
     int _pegSeq;
 
+    // how the ship sits on the stand, in words (the stand view shows it from the front)
+    static string StandLine(JsonNode r)
+    {
+        double inc = r["incline"]?.GetValue<double>() ?? 0, tilt = r["tilt"]?.GetValue<double>() ?? 0;
+        string pitch = inc == 0 ? "level" : $"nose {(inc > 0 ? "up" : "down")} {Math.Abs(inc):0}°";
+        string bank = tilt == 0 ? "wings level"
+            : $"{(tilt > 0 ? "right wing down (toward you)" : "left wing down (away from you)")} {Math.Abs(tilt):0}°";
+        var stand = r["stand_url"] != null
+            ? "The stand shown is the one the export builds, at preview detail."
+            : "The stand in the viewer is a simple stand-in: the exported stand adds the name plate, lettering, logo and beveled front.";
+        var balance = r["balance"]?.GetValue<double>() is double b
+            ? b < 0 ? $" Warning: the ship's balance point is {-b:0} mm outside the base, so it would tip over. Make the base bigger, add a second post or move the peg."
+                    : $" Balance point {b:0} mm inside the base edge."
+            : "";
+        return $"Seen from the stand's front (the light edge): nose to the right, {pitch}, {bank}. " + stand + balance;
+    }
+
     async void RefreshPeg(int delayMs = 600)
     {
         var s = _state;
@@ -432,7 +473,7 @@ public sealed partial class Inspector : UserControl
             if (seq != _pegSeq || s.Selected != t) return;
             var shown = r["top"] != null;
             await s.Viewer.Peg(shown ? r : null);
-            PegNote.Text = shown ? "The peg is shown in orange in the viewer." : "";
+            PegNote.Text = shown ? "The peg is shown in orange in the viewer. " + StandLine(r) : "";
         }
         catch
         {
@@ -448,7 +489,16 @@ public sealed partial class Inspector : UserControl
         PegFwdBox.IsEnabled = !none;
         PegSideBox.IsEnabled = !none;
         PlateText.IsEnabled = PlateText2.IsEnabled = LogoBox.IsEnabled = ScaleSwitch.IsEnabled = !none && Picked(ShapeBox) == "rect";
+        PostsBox.IsEnabled = BaseWBox.IsEnabled = !none;
+        BaseDBox.IsEnabled = !none && Picked(ShapeBox) == "rect";
+        // the stand's colors go into a painted 3MF only
+        var painted = Picked(FormatBox) == "3mf" && Picked(ColorsBox) is var c && c != "" && c != "0";
+        BaseColorBox.IsEnabled = LogoColorBox.IsEnabled = TextColorBox.IsEnabled = Text2ColorBox.IsEnabled = !none && painted;
     }
+
+    void Paint_Toggled(object sender, SelectionChangedEventArgs e) => UpdateStand();
+
+    void StandSetting_Changed(object sender, SelectionChangedEventArgs e) => RefreshPeg();
 
     JsonObject PrintOptions()
     {
@@ -460,8 +510,12 @@ public sealed partial class Inspector : UserControl
             ["size_mm"] = Safe(SizeBox.Value), ["voxel_mm"] = Safe(VoxelBox.Value), ["nozzle_mm"] = Safe(NozzleBox.Value),
             ["min_feature_nozzles"] = Safe(MinNBox.Value), ["stand_height_mm"] = Safe(StandHBox.Value),
             ["stand_forward_mm"] = Safe(PegFwdBox.Value), ["stand_side_mm"] = Safe(PegSideBox.Value),
-            ["tilt_deg"] = Safe(TiltBox.Value), ["hollow_mm"] = Safe(HollowBox.Value),
+            ["tilt_deg"] = Safe(TiltBox.Value), ["roll_deg"] = Safe(RollBox.Value), ["hollow_mm"] = Safe(HollowBox.Value),
             ["paint_colors"] = Picked(FormatBox) == "3mf" && int.TryParse(Picked(ColorsBox), out var nc) ? nc : 0,
+            ["stand_posts"] = int.TryParse(Picked(PostsBox), out var np) ? np : 1,
+            ["stand_base_w_mm"] = Safe(BaseWBox.Value), ["stand_base_d_mm"] = Safe(BaseDBox.Value),
+            ["stand_base_color"] = Picked(BaseColorBox), ["stand_logo_color"] = Picked(LogoColorBox),
+            ["stand_text_color"] = Picked(TextColorBox), ["stand_text2_color"] = Picked(Text2ColorBox),
         };
         // a scale the user chose wins, so every model comes out at that scale
         if (_sizeBy == "scale" && Safe(ScaleBox.Value) > 0) o["scale"] = ScaleBox.Value;
@@ -569,7 +623,12 @@ public sealed partial class Inspector : UserControl
             if (r.Long("thickened") > 0) parts.Add($"{r.Long("thickened")} thin parts thickened to {r.Num("min_feature_mm"):0.##} mm");
             var colors = r.Items("colors").Select(c => c.GetValue<string>()).ToList();
             if (colors.Count > 0)  // painted 3MF: which color goes in which filament slot
-                parts.Add("painted for Bambu Studio, filaments " + string.Join(", ", colors.Select((c, i) => $"{i + 1} {c}")));
+            {
+                // the closest Bambu PLA Basic color names the spool to load in each slot
+                var names = r.Items("color_names").Select(c => c.GetValue<string>()).ToList();
+                parts.Add("painted for Bambu Studio, filaments " + string.Join(", ", colors.Select((c, i) =>
+                    i < names.Count ? $"{i + 1} {c} ({names[i]})" : $"{i + 1} {c}")));
+            }
             var files = r.Items("files").Select(f => f.GetValue<string>()).ToList();
             ShowResult(PrintResult, InfoBarSeverity.Success, $"{size} mm ({r.Str("scale")})", string.Join(" · ", parts), files);
             _ = ShowLastPrint(t);

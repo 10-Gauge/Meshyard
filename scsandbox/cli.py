@@ -128,7 +128,7 @@ def cmd_print(a, s):
     opts = printprep.PrintOptions.from_settings(
         s, size_mm=a.size, scale=a.scale, mode=a.mode, voxel_mm=a.voxel, format=a.format, nozzle_mm=a.nozzle,
         min_feature_nozzles=a.min_nozzles, thicken=False if a.no_thicken else None, hollow_mm=a.hollow,
-        tilt_deg=a.tilt, stand=a.stand, stand_height_mm=a.stand_height, part_overrides=overrides or None,
+        tilt_deg=a.tilt, roll_deg=a.roll, stand=a.stand, stand_height_mm=a.stand_height, part_overrides=overrides or None,
         stand_shape="rect" if (a.plate is not None or a.plate_scale) else None,
         stand_text=a.plate if a.plate is not None else (stem if a.plate_scale else None),
         stand_text2=a.plate2, stand_scale=True if a.plate_scale else None, paint_colors=a.colors)
@@ -252,7 +252,8 @@ def main(argv=None):
     pr.add_argument("--hollow", type=float, help="hollow with walls this thick in mm (resin)")
     pr.add_argument("--stand", choices=["none", "peg", "attached"])
     pr.add_argument("--stand-height", type=float, help="mm between stand base and model")
-    pr.add_argument("--tilt", type=float, help="display angle in degrees")
+    pr.add_argument("--tilt", type=float, help="incline in degrees: nose up (+) or down (-)")
+    pr.add_argument("--roll", type=float, help="tilt in degrees: right wing down (+) or left wing down (-)")
     pr.add_argument("--plate", help="name plate text (rectangular base with a plate)")
     pr.add_argument("--plate2", help="smaller second line on the plate")
     pr.add_argument("--plate-scale", action="store_true", help="put the print scale (1:85) on the plate")

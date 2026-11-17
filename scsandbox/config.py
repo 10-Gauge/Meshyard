@@ -50,6 +50,8 @@ DEFAULTS: dict = {
         # StarBreaker Blender add-on: landing gear, doors, ramps, canopies.
         "export_entity_animated": ["{exe}", "entity", "export", "{name}", "{out}", "--kind", "decomposed", "--lod", "{lod}"],
         # rig + animation clips only (landing gear up): no textures, interior or lights
+        # each paint's materials, colors and livery textures (the Paint list)
+        "export_entity_paints": ["{exe}", "entity", "export", "{name}", "{out}", "--kind", "decomposed", "--lod", "1", "--materials", "textures", "--no-interior", "--no-lights", "--mip", "3"],
         "export_entity_rig": ["{exe}", "entity", "export", "{name}", "{out}", "--kind", "decomposed", "--lod", "1", "--materials", "none", "--no-interior", "--no-lights", "--mip", "4"],
         "export_entity_print": ["{exe}", "entity", "export", "{name}", "{out}", "--lod", "0", "--materials", "colors", "--no-interior"],
         # one worn character mesh (.skinm) as GLB in the body's bind pose

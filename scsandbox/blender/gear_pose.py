@@ -73,6 +73,11 @@ try:
             if a.get("name") and a["name"] not in names and \
                     re.search(r"(?i)(door|airlock|hatch|ramp|canopy|cockpit)\w*_(close|open|deploy|retract)", a["name"]):
                 names.append(a["name"])
+            # each leg's own clip, when the ship's gear clip only moves a dummy (the
+            # Basher's ".../landing_gear/glsn_basher_lg_rear_left_landing_gear_retract.caf")
+            if a.get("name") and a["name"] not in names and not frags and \
+                    re.search(r"(?i)landing_?gear/.*landing_?gear_(deploy|retract)\.caf$", a["name"]):
+                names.append(a["name"])
             if not a.get("name") or "landinggear" not in kinds:
                 continue
             gear_clips.add(a["name"])
@@ -182,12 +187,7 @@ try:
                 plan.append((n, "snap_last"))
             elif not is_gear_clip(n) and re.search(r"(^|_|:)wings?_(retract|fold|close)(\.caf)?$", low):
                 plan.append((n, "snap_first"))
-        if any(FLIGHT_WINGS.search(n.lower()) for n in names):
-            # the Stingray's deployed mode also brings its nose cannons out
-            for n in names:
-                m = re.search(r"cannons?_(deploy|retract)$", n.lower())
-                if m:
-                    plan.append((n, "snap_last" if m.group(1) == "deploy" else "snap_first"))
+        # the guns stay as the Weapons switch has them (the Stingray's cannons too)
     elif kind == "vtol":
         # thrusters that swing down for vertical flight: "nacelles_deploy" (Starlifter, Golem,
         # RAFT), "vtol_deploy" (Paladin, Hull B, Asgard, Fury), "nacelles_open" (Starlancer),
@@ -213,9 +213,17 @@ try:
             r"|bomb(?:er)?|bay)(?:_[a-z0-9]+){0,3}?_(deploy|retract|open|close)(?:_(?:left|right|\d+))?(?:\.caf)?$")
         not_weapon = re.compile(r"(?i)seat|enter|exit|ladder|cockpit|canopy|cargo|turret_door|operator|pilot|rack|component|locker")
         out = kind == "weapons_out"
+        # Gun covers that open on their own ("weapon_left_close" on the Stingray's top wing
+        # guns: the game's open-all-exterior action) stay shut when the ship has a separate
+        # clip that brings its guns out; missile and bomb bays still open.
+        covers = re.compile(r"(?i)(?:^|[_/:])(?:weapons?|guns?)(?:_(?:left|right|top|\d+))*_(open|close)(?:\.caf)?$")
+        has_deploy = any(weapon.search(n) and not not_weapon.search(n)
+                         and weapon.search(n).group(1).lower() in ("deploy", "retract") for n in names)
         for n in names:
             m = weapon.search(n)
             if not m or not_weapon.search(n):
+                continue
+            if has_deploy and covers.search(n):
                 continue
             opening = m.group(1).lower() in ("deploy", "open")
             plan.append((n, "snap_last" if opening == out else "snap_first"))
@@ -306,7 +314,12 @@ try:
         # whose gear doesn't already hang below the hull is gear up.
         by_drop = down_drop > max(20.0, 1.3 * up_drop) and up_drop > -0.5 * abs(down_drop) \
             and not (hangs and up_drop > 0.5 * down_drop)
-        if (down > 20 and (up * 4 < down or by_drop)) or (up == 0 and down > 0 and down_drop > 0.3):
+        # Gear that hangs below the hull, lifts going up and barely drops going down is
+        # down already, however many rig bones the down clip touches (the Mk I Hornets,
+        # Archimedes and Skylark: their deploy clips move the whole rig a little).
+        already_down = hangs and up_drop < 0 and abs(down_drop) < 20.0
+        if not already_down and ((down > 20 and (up * 4 < down or by_drop))
+                                 or (up == 0 and down > 0 and down_drop > 0.3)):
             plan += gear_plan(False)
             result["gear_down"] = True
 

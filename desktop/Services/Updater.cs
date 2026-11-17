@@ -72,39 +72,78 @@ public static class Updater
                            (string?)json!["html_url"] ?? ReleasesPage);
     }
 
-    /// <summary>Download the release next to the running exe and check it. Progress goes from 0 to 1.</summary>
+    /// <summary>Download the release next to the running exe and check it. Progress goes from 0 to 1.
+    /// The copy runs off the UI thread. If no data arrives for a while the connection is dropped and
+    /// the download picks up where it stopped, so a stalled transfer can't sit at one percent forever.</summary>
     public static async Task DownloadAsync(Release r, IProgress<double>? progress = null)
     {
         var tmp = DownloadPath;
         try
         {
-            using var resp = await Http.GetAsync(r.Url, HttpCompletionOption.ResponseHeadersRead);
-            resp.EnsureSuccessStatusCode();
-            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            long done = 0;
-            await using (var src = await resp.Content.ReadAsStreamAsync())
-            await using (var dst = File.Create(tmp))
+            await Task.Run(() => CopyWithResumeAsync(r, tmp, progress)).ConfigureAwait(false);
+            using var hash = SHA256.Create();
+            long size;
+            await using (var f = File.OpenRead(tmp))
             {
-                var buf = new byte[1 << 20];
-                int n;
-                while ((n = await src.ReadAsync(buf)) > 0)
-                {
-                    await dst.WriteAsync(buf.AsMemory(0, n));
-                    hash.AppendData(buf, 0, n);
-                    done += n;
-                    progress?.Report(r.Size > 0 ? Math.Min(1.0, (double)done / r.Size) : 0);
-                }
+                size = f.Length;
+                if (size != r.Size)
+                    throw new IOException($"the download was {size:N0} bytes, expected {r.Size:N0}");
+                var digest = await hash.ComputeHashAsync(f).ConfigureAwait(false);
+                if (r.Sha256 != null && !Convert.ToHexString(digest).Equals(r.Sha256, StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("the download didn't match the release's checksum");
             }
-            if (done != r.Size)
-                throw new IOException($"the download was {done:N0} bytes, expected {r.Size:N0}");
-            if (r.Sha256 != null && !Convert.ToHexString(hash.GetHashAndReset()).Equals(r.Sha256, StringComparison.OrdinalIgnoreCase))
-                throw new IOException("the download didn't match the release's checksum");
         }
         catch
         {
             try { File.Delete(tmp); } catch { }
             throw;
         }
+    }
+
+    static readonly TimeSpan StallLimit = TimeSpan.FromSeconds(30);
+    const int MaxTries = 6;
+
+    static async Task CopyWithResumeAsync(Release r, string tmp, IProgress<double>? progress)
+    {
+        File.Delete(tmp);
+        long done = 0;
+        int lastPct = -1;
+        Exception? last = null;
+        for (int attempt = 0; attempt < MaxTries && done < r.Size; attempt++)
+        {
+            if (attempt > 0) await Task.Delay(TimeSpan.FromSeconds(2 * attempt)).ConfigureAwait(false);
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Get, r.Url);
+                if (done > 0) req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(done, null);
+                using var headCts = new CancellationTokenSource(StallLimit);
+                using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, headCts.Token).ConfigureAwait(false);
+                resp.EnsureSuccessStatusCode();
+                if (done > 0 && resp.StatusCode != System.Net.HttpStatusCode.PartialContent)
+                    done = 0;   // the server ignored the range, start over
+                await using var src = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                await using var dst = new FileStream(tmp, done > 0 ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20, true);
+                var buf = new byte[1 << 20];
+                while (true)
+                {
+                    using var readCts = new CancellationTokenSource(StallLimit);
+                    int n = await src.ReadAsync(buf, readCts.Token).ConfigureAwait(false);
+                    if (n == 0) break;
+                    await dst.WriteAsync(buf.AsMemory(0, n)).ConfigureAwait(false);
+                    done += n;
+                    int pct = r.Size > 0 ? (int)Math.Min(100, done * 100 / r.Size) : 0;
+                    if (pct != lastPct) { lastPct = pct; progress?.Report(pct / 100.0); }
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException or IOException or OperationCanceledException)
+            {
+                last = ex;   // stalled or dropped: try again from where it stopped
+            }
+        }
+        if (done < r.Size)
+            throw new IOException(last is OperationCanceledException
+                ? "the download stalled"
+                : $"the download stopped early ({last?.Message ?? "connection closed"})");
     }
 
     /// <summary>Start the script that swaps in the downloaded exe once this process has exited,

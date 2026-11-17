@@ -49,6 +49,10 @@ import numpy as np
 import trimesh
 
 Y_UP_TO_Z_UP = trimesh.transformations.rotation_matrix(math.pi / 2, [1, 0, 0])
+# The ship on its stand: nose to +x (the right, seen from the stand's front, the -y
+# side with the name plate), right wing toward the front (-y), top up (+z). The export
+# has the nose along +y once turned Z-up.
+NOSE_RIGHT = trimesh.transformations.rotation_matrix(-math.pi / 2, [0, 0, 1])
 PRINT_FORMATS = ("3mf", "stl", "obj", "ply")
 # Gaps in the hull up to about twice this (at print scale) are sealed before filling.
 SEAL_MM = 0.8
@@ -117,7 +121,8 @@ class PrintOptions:
     # per-part choices from the "find thin parts" list: {part name: {"action": "remove"|"thicken"|"auto", "mm": 1.5}}
     part_overrides: dict = field(default_factory=dict)
     hollow_mm: float = 0.0          # 0 = solid; resin prints usually use 1.5-2.5
-    tilt_deg: float = 0.0           # display angle (nose up/down)
+    tilt_deg: float = 0.0           # incline: nose up (+) or down (-)
+    roll_deg: float = 0.0           # tilt: right wing down (+, toward the stand's front) or left (-)
     stand: str = "none"             # none | peg (separate stand, socket in model) | attached
     stand_height_mm: float = 30.0   # gap between the stand's base and the model
     stand_shape: str = "round"      # round | rect (rectangular base with a text plate)
@@ -125,6 +130,13 @@ class PrintOptions:
     stand_text2: str = ""           # optional second, smaller line under it
     stand_scale: bool = False       # add the print scale (1:85) to the plate's second line
     stand_logo: str = ""            # PNG mask of a logo embossed beside the text
+    stand_posts: int = 1            # 1, or 2 posts (fore and aft) for long or heavy prints
+    stand_base_w_mm: float = 0.0    # base width along the ship (round: its diameter); 0 = auto
+    stand_base_d_mm: float = 0.0    # rectangular base depth (front to back); 0 = auto
+    stand_base_color: str = ""      # painted 3MF: base and post filament (#rrggbb); "" = filament 1
+    stand_logo_color: str = ""      # painted 3MF: logo filament
+    stand_text_color: str = ""      # painted 3MF: first plate line filament
+    stand_text2_color: str = ""     # painted 3MF: second plate line filament
     stand_forward_mm: float = 0.0   # move the stand peg toward the nose (+) or tail (-)
     stand_side_mm: float = 0.0      # move the stand peg to the right (+) or left (-)
     paint_colors: int = 0           # 3MF only: paint the model in this many filament colors (Bambu Studio)
@@ -281,6 +293,33 @@ def _smooth_labels(mesh: trimesh.Trimesh, labels: np.ndarray, k: int, passes: in
     return lab
 
 
+# Bambu Lab PLA Basic colors (approximate), to say which spool suits each painted slot
+BAMBU_PLA_BASIC = {
+    "Jade White": "#FFFFFF", "Light Gray": "#D1D3D5", "Silver": "#A6A9AA", "Gray": "#8E9089",
+    "Dark Gray": "#545454", "Black": "#000000", "Blue Gray": "#5B6579", "Beige": "#F7E6DE",
+    "Gold": "#E4BD68", "Bronze": "#847D48", "Brown": "#9D432C", "Cocoa Brown": "#6F5034",
+    "Red": "#C12E1F", "Maroon Red": "#9D2235", "Magenta": "#EC008C", "Pink": "#F55A74",
+    "Orange": "#FF6A13", "Pumpkin Orange": "#FF9016", "Yellow": "#F4EE2A",
+    "Sunflower Yellow": "#FEC600", "Bright Green": "#BECF00", "Bambu Green": "#00AE42",
+    "Mistletoe Green": "#3F8E43", "Turquoise": "#00B1B7", "Cyan": "#0086D6",
+    "Cobalt Blue": "#0056B8", "Blue": "#0A2989", "Purple": "#5E43B7", "Indigo Purple": "#482960",
+}
+
+
+def closest_filament(hex_color: str) -> str:
+    """The Bambu PLA Basic color nearest to hex_color (weighted RGB distance)."""
+    def rgb(h):
+        h = h.lstrip("#")
+        return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    r, g, b = rgb(hex_color)
+
+    def dist(h):
+        r2, g2, b2 = rgb(h)
+        rm = (r + r2) / 2
+        return (2 + rm / 256) * (r - r2) ** 2 + 4 * (g - g2) ** 2 + (2 + (255 - rm) / 256) * (b - b2) ** 2
+    return min(BAMBU_PLA_BASIC, key=lambda n: dist(BAMBU_PLA_BASIC[n]))
+
+
 def _paint_code(n: int) -> str:
     """Bambu Studio / PrusaSlicer per-triangle paint state for a whole triangle painted
     with filament n (the TriangleSelector bit stream, written as hex)."""
@@ -425,18 +464,24 @@ def real_size(parts) -> list[float]:
     return [float(ex[0]), float(ex[2]), float(ex[1])]  # Y-up input
 
 
-def _orient_and_scale(parts, size_mm: float, tilt_deg: float = 0.0, ratio: float = 0.0) -> float:
-    """Turn the model Z-up and size it. ratio is the N of a 1:N scale; without one the
-    longest side becomes size_mm. Returns the scale in mm per game meter."""
+def _orient_and_scale(parts, size_mm: float, tilt_deg: float = 0.0, ratio: float = 0.0,
+                      roll_deg: float = 0.0, nose_right: bool = True) -> float:
+    """Turn the model Z-up with its nose to +x (see NOSE_RIGHT), tilt it (roll_deg about
+    its length, right wing down for positive) and incline it (tilt_deg, nose up for
+    positive), then size it. ratio is the N of a 1:N scale; without one the longest side
+    becomes size_mm. Characters (nose_right False) keep facing the stand's front.
+    Returns the scale in mm per game meter."""
+    turn = NOSE_RIGHT @ Y_UP_TO_Z_UP if nose_right else Y_UP_TO_Z_UP
     for _, m in parts:
-        m.apply_transform(Y_UP_TO_Z_UP)
+        m.apply_transform(turn)
     lo, hi = _bounds(parts)
-    if tilt_deg:
-        # Tilt about the horizontal axis across the model's length (nose up for positive angles
-        # when the nose points to +Y/+X; use a negative angle if it tips the wrong way).
-        length_axis = 1 if (hi - lo)[1] >= (hi - lo)[0] else 0
-        axis = [1, 0, 0] if length_axis == 1 else [0, -1, 0]
-        rot = trimesh.transformations.rotation_matrix(math.radians(tilt_deg), axis, (lo + hi) / 2)
+    c = (lo + hi) / 2
+    rot = np.eye(4)
+    if roll_deg:   # about the nose axis: +x
+        rot = trimesh.transformations.rotation_matrix(math.radians(roll_deg), [1, 0, 0], c) @ rot
+    if tilt_deg:   # about the stand's left-right axis: nose (+x) up for positive
+        rot = trimesh.transformations.rotation_matrix(math.radians(-tilt_deg), [0, 1, 0], c) @ rot
+    if roll_deg or tilt_deg:
         for _, m in parts:
             m.apply_transform(rot)
         lo, hi = _bounds(parts)
@@ -500,7 +545,8 @@ def analyze(glb: Path, opts: PrintOptions) -> dict:
     """What the print would look like before running it: size, scale and the slender parts."""
     parts = load_parts(Path(glb), opts.exclude_nodes)
     real = real_size(parts)
-    scale = _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale)
+    scale = _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale, opts.roll_deg,
+                              not opts.figure)
     lo, hi = _bounds(parts)
     return {"parts": len(parts), "scale": _scale_text(scale), "size_mm": [round(float(x), 1) for x in hi - lo],
             "real_m": [round(x, 2) for x in real],
@@ -560,7 +606,8 @@ def peg_preview(glb: Path, opts: PrintOptions, log=print) -> dict:
     probe = np.array([c, c + [0.01, 0, 0], c + [0, 0.01, 0], c + [0, 0, 0.01]])
     marker = trimesh.Trimesh(vertices=probe.copy(), faces=[[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]], process=False)
     parts.append(("__peg_probe__", marker))
-    _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale)
+    _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale, opts.roll_deg,
+                              not opts.figure)
     moved = np.asarray(parts.pop()[1].vertices, float)
     if opts.scale > 0:
         plo, phi = _bounds(parts)
@@ -591,13 +638,73 @@ def peg_preview(glb: Path, opts: PrintOptions, log=print) -> dict:
         base = {"shape": "rect", "corners": [r4(model([x, y, z])) for z in (base_bottom_z, post_bottom_z)
                                              for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]}
     else:
-        base = {"shape": "round", "bottom": r4(model([spec.x, spec.y, base_bottom_z])),
-                "top": r4(model([spec.x, spec.y, post_bottom_z])), "r": round(spec.base_r * mm, 4)}
-    return {"stand": opts.stand, "top": r4(top),
-            "peg_r": round(spec.peg_r * mm, 4), "post_r": round(spec.post_r * mm, 4),
-            "depth": round(spec.peg_depth * mm, 4),
-            "down": r4(to_model @ np.array([0, 0, -1.0]) / mm),
-            "post_bottom": r4(model([spec.x, spec.y, post_bottom_z])), "base": base}
+        x0, x1, y0, y1 = _base_box(spec)
+        bx, by = (x0 + x1) / 2, (y0 + y1) / 2
+        base = {"shape": "round", "bottom": r4(model([bx, by, base_bottom_z])),
+                "top": r4(model([bx, by, post_bottom_z])), "r": round(spec.base_r * mm, 4)}
+    # the stand's own axes in model coordinates, so the viewer can show it square on:
+    # x toward the nose (the stand's right), y toward the stand's back, z up
+    axes = {k: r4(to_model @ e / np.linalg.norm(to_model @ e)) for k, e in
+            (("x", np.array([1.0, 0, 0])), ("y", np.array([0, 1.0, 0])), ("z", np.array([0, 0, 1.0])))}
+    posts = all_posts(spec)
+    result = {"stand": opts.stand, "top": r4(top), "axes": axes,
+              "tops": [r4(model([px, py, ptz])) for px, py, ptz, _ in posts],
+              "post_bottoms": [r4(model([px, py, post_bottom_z])) for px, py, _, _ in posts],
+              "incline": opts.tilt_deg, "tilt": opts.roll_deg,
+              "balance": None if spec.balance is None else round(spec.balance, 1),
+              "peg_r": round(spec.peg_r * mm, 4), "post_r": round(spec.post_r * mm, 4),
+              "depth": round(spec.peg_depth * mm, 4),
+              "down": r4(to_model @ np.array([0, 0, -1.0]) / mm),
+              "post_bottom": r4(model([spec.x, spec.y, post_bottom_z])), "base": base}
+    # the stand as the export builds it (plate, lettering, logo), coarser, for the viewer
+    try:
+        result["stand_glb"] = str(_stand_preview_glb(Path(glb), spec, opts, base_bottom_z, model))
+    except Exception as e:  # noqa: BLE001  the simple stand still shows
+        log(f"stand preview skipped: {e}")
+    return result
+
+
+STAND_PREVIEW_VERSION = 1
+STAND_GREY, PLATE_GREY = "#5D636B", "#C9CED6"
+
+
+def _stand_preview_glb(glb: Path, spec: StandSpec, opts: PrintOptions, base_bottom_z: float, model) -> Path:
+    """The stand mesh (as exported, at preview resolution) in the model's coordinates,
+    colored by part: the base, logo and text in their picked colors. Cached by settings."""
+    import hashlib
+    key = json.dumps([STAND_PREVIEW_VERSION, glb.name, glb.stat().st_mtime_ns, repr(spec), opts.stand,
+                      opts.stand_height_mm, opts.stand_base_color, opts.stand_logo_color,
+                      opts.stand_text_color, opts.stand_text2_color], default=str)
+    out = glb.parent / "stand_previews" / (hashlib.sha1(key.encode()).hexdigest()[:16] + ".glb")
+    if out.exists():
+        return out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    height = opts.stand_height_mm
+    m = make_stand_mesh(spec, height, 0.3, peg=opts.stand == "peg", smooth=opts.smooth, preview=True)
+    lab = np.maximum(stand_face_labels(m.vertices, m.faces, spec, 0.0, height), 0)
+    v = np.asarray(m.vertices, float).copy()
+    v[:, 2] += base_bottom_z
+    mv = np.array([model(p) for p in v])
+    base = opts.stand_base_color or STAND_GREY
+    colors = [base, opts.stand_logo_color or (base if opts.stand_base_color else PLATE_GREY),
+              opts.stand_text_color or (base if opts.stand_base_color else PLATE_GREY),
+              opts.stand_text2_color or (base if opts.stand_base_color else PLATE_GREY)]
+    scene = trimesh.Scene()
+    for k in range(4):
+        sel = np.nonzero(lab == k)[0]
+        if not len(sel):
+            continue
+        part = trimesh.Trimesh(mv, np.asarray(m.faces)[sel], process=False)
+        part.remove_unreferenced_vertices()
+        h = colors[k].lstrip("#")
+        rgba = [int(h[i:i + 2], 16) for i in (0, 2, 4)] + [255]
+        part.visual = trimesh.visual.TextureVisuals(material=trimesh.visual.material.PBRMaterial(
+            name=f"stand_{STAND_PARTS[k]}", baseColorFactor=rgba, metallicFactor=0.0, roughnessFactor=0.6))
+        scene.add_geometry(part, node_name=f"stand_{STAND_PARTS[k]}")
+    tmp = out.with_name(out.name + ".part")
+    tmp.write_bytes(scene.export(file_type="glb"))
+    tmp.replace(out)
+    return out
 
 
 def measure(glb: Path, exclude: list[str]) -> dict:
@@ -984,6 +1091,14 @@ class StandSpec:
     text_band: float = 0.0  # rect: depth of the front strip that carries the text
     mouth_z: float | None = None  # lowest point of the underside around the socket (sloped
                                   # undersides: top_z is the highest, so the socket is full depth)
+    posts: list = field(default_factory=list)   # more posts: (x, y, top_z, mouth_z) each
+    balance: float | None = None  # mm the model's balance point sits inside the base edge
+                                  # (negative: outside, it would tip over)
+
+
+def all_posts(s: StandSpec) -> list[tuple[float, float, float, float | None]]:
+    """Every post: (x, y, top_z, mouth_z), the first one is the spec's own."""
+    return [(s.x, s.y, s.top_z, s.mouth_z)] + [tuple(p) for p in s.posts]
 
 
 def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
@@ -1005,9 +1120,9 @@ def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
         raise ValueError("Nothing to put on a stand")
     # Evaluate a window of columns around the center of mass (cheap and stable).
     rad = int(math.ceil(max(g.shape[:2]) * 0.25))
-    # model axes after posing: +y is the nose, +x the right side
-    cx = int(np.clip(com[0] + opts.stand_side_mm / g.pitch, 0, g.shape[0] - 1))
-    cy = int(np.clip(com[1] + opts.stand_forward_mm / g.pitch, 0, g.shape[1] - 1))
+    # model axes after posing (NOSE_RIGHT): +x is the nose, -y the right side
+    cx = int(np.clip(com[0] + opts.stand_forward_mm / g.pitch, 0, g.shape[0] - 1))
+    cy = int(np.clip(com[1] - opts.stand_side_mm / g.pitch, 0, g.shape[1] - 1))
     # how far the underside rises within the post's footprint: small on a broad belly,
     # large under a thin fin or keel (the post would only touch its edge)
     rp = max(1, int(round(post_r / g.pitch)))
@@ -1021,60 +1136,110 @@ def plan_stand(g: Grid, opts: PrintOptions, log=print) -> StandSpec:
     yy, xx = np.ogrid[-rc:rc + 1, -rc:rc + 1]
     path = xx * xx + yy * yy <= rc * rc
     drop = lowf - ndimage.minimum_filter(lowf, footprint=path, mode="constant", cval=g.shape[2])
-    best, best_score = None, -1e18
     need = int(math.ceil((peg_depth + 1.0) / g.pitch))
-    step = max(1, rad // 40)
-    for i in range(max(cx - rad, 0), min(cx + rad + 1, g.shape[0]), step):
-        for j in range(max(cy - rad, 0), min(cy + rad + 1, g.shape[1]), step):
-            if low[i, j] < 0:
-                continue
-            col = g.v[i, j, low[i, j]:]
-            gap = np.argmin(col) if not col.all() else len(col)
-            run[i, j] = gap
-            d = math.hypot(i - cx, j - cy) * g.pitch
-            # prefer a broad part of the underside (a shallower socket in the belly beats a
-            # deep one up a fin), then columns that fit the socket, then close to the center
-            # of mass (as moved), then low
-            steep = rise[i, j] * g.pitch > post_r or drop[i, j] * g.pitch > 1.0
-            score = (1e6 if gap >= need else gap * 100) - (3e6 if steep else 0) \
-                - d * 10 - low[i, j] * g.pitch
-            if score > best_score:
-                best, best_score = (i, j), score
-    i, j = best
-    fit = run[i, j] * g.pitch
+    side_w = 1.0 if opts.figure else 3.0
+    front_w = 0.0 if opts.figure else 1.0
+
+    def pick(cx: int, cy: int, rad: int) -> tuple[int, int]:
+        best, best_score = None, -1e18
+        step = max(1, rad // 40)
+        for i in range(max(cx - rad, 0), min(cx + rad + 1, g.shape[0]), step):
+            for j in range(max(cy - rad, 0), min(cy + rad + 1, g.shape[1]), step):
+                if low[i, j] < 0:
+                    continue
+                col = g.v[i, j, low[i, j]:]
+                gap = np.argmin(col) if not col.all() else len(col)
+                run[i, j] = gap
+                # sideways moves count triple: a fin under the middle pushes the peg in front
+                # of or behind it on the centerline before off to one side, where the fin
+                # hides the post from the stand's front (figures face the front: no
+                # preferred direction)
+                d = math.hypot(i - cx, (j - cy) * side_w) * g.pitch
+                # prefer a broad part of the underside (a shallower socket in the belly beats
+                # a deep one up a fin), then columns that fit the socket, then close to the
+                # target, then low
+                steep = rise[i, j] * g.pitch > post_r or drop[i, j] * g.pitch > 1.0
+                score = (1e6 if gap >= need else gap * 100) - (3e6 if steep else 0) \
+                    - d * 10 - low[i, j] * g.pitch + (cy - j) * g.pitch * front_w  # ties: the front side
+                if score > best_score:
+                    best, best_score = (i, j), score
+        if best is None:
+            raise ValueError("Nothing to put on a stand")
+        return best
+
+    def mouth(i: int, j: int) -> tuple[float, float]:
+        # On a sloped underside (an incline or tilt) the socket's far edge is higher than
+        # its near edge: measure the depth from the highest point of the mouth, and open
+        # the mouth down to the lowest, or a 45 degree tilt leaves a scoop ~1 mm deep.
+        rv = int(math.ceil((peg_r + 0.15) / g.pitch))
+        ii, jj = np.ogrid[-rv:rv + 1, -rv:rv + 1]
+        win = low[max(i - rv, 0):i + rv + 1, max(j - rv, 0):j + rv + 1]
+        disk = (ii * ii + jj * jj <= rv * rv)[max(rv - i, 0):, max(rv - j, 0):][:win.shape[0], :win.shape[1]]
+        ring = win[disk & (win >= 0)]
+        return (g.origin[2] + (ring.max() if len(ring) else low[i, j]) * g.pitch,
+                g.origin[2] + (ring.min() if len(ring) else low[i, j]) * g.pitch)
+
+    xs_occ = np.nonzero(any_z.any(axis=1))[0]
+    length = (xs_occ[-1] - xs_occ[0] + 1) * g.pitch if len(xs_occ) else 0.0
+    if opts.stand_posts >= 2 and length > 8 * post_r and not opts.figure:
+        # fore and aft of the balance point (as moved), each its own pick
+        half = int(round(0.22 * length / g.pitch))
+        cells = [pick(int(np.clip(cx + k * half, 0, g.shape[0] - 1)), cy, max(2, rad // 2)) for k in (-1, 1)]
+    else:
+        cells = [pick(cx, cy, rad)]
+    fit = min(run[i, j] for i, j in cells) * g.pitch
     if fit < peg_depth + 1.0:
         peg_depth = max(2.0, fit - 1.0)
-        log(f"  the model is thin under its center: socket depth limited to {peg_depth:.1f} mm")
-    x = g.origin[0] + (i + 0.5) * g.pitch
-    y = g.origin[1] + (j + 0.5) * g.pitch
-    # On a sloped underside (a tilted display angle) the socket's far edge is higher than
-    # its near edge: measure the depth from the highest point of the mouth, and open the
-    # mouth down to the lowest, or a 45 degree tilt leaves a scoop ~1 mm deep.
-    rv = int(math.ceil((peg_r + 0.15) / g.pitch))
-    ii, jj = np.ogrid[-rv:rv + 1, -rv:rv + 1]
-    win = low[max(i - rv, 0):i + rv + 1, max(j - rv, 0):j + rv + 1]
-    disk = (ii * ii + jj * jj <= rv * rv)[max(rv - i, 0):, max(rv - j, 0):][:win.shape[0], :win.shape[1]]
-    ring = win[disk & (win >= 0)]
-    top_z = g.origin[2] + (ring.max() if len(ring) else low[i, j]) * g.pitch
-    mouth_z = g.origin[2] + (ring.min() if len(ring) else low[i, j]) * g.pitch
+        log(f"  the model is thin under the post: socket depth limited to {peg_depth:.1f} mm")
+    found = []
+    for i, j in cells:
+        top_z, mouth_z = mouth(i, j)
+        found.append((g.origin[0] + (i + 0.5) * g.pitch, g.origin[1] + (j + 0.5) * g.pitch, top_z, mouth_z))
+    # the first post is the one the base hangs from (the lowest underside: the shortest post)
+    found.sort(key=lambda p: -p[2])
+    x, y, top_z, mouth_z = found[0]
     lo = g.origin
     hi = g.origin + np.array(g.shape) * g.pitch
-    base_r = float(np.clip(0.3 * max(hi[0] - lo[0], hi[1] - lo[1]), 25.0, 90.0))
-    spec = StandSpec(x, y, top_z, post_r, peg_r, peg_depth, base_r, mouth_z=mouth_z)
+    base_r = float(np.clip(0.3 * max(hi[0] - lo[0], hi[1] - lo[1]), 25.0, 150.0))
+    spec = StandSpec(x, y, top_z, post_r, peg_r, peg_depth, base_r, mouth_z=mouth_z,
+                     posts=[list(p) for p in found[1:]])
+    spread = max(p[0] for p in found) - min(p[0] for p in found)
     if opts.stand_shape == "rect":
-        _plan_rect(spec, hi[0] - lo[0], hi[1] - lo[1], opts.stand_text, opts.stand_text2, opts.stand_logo)
+        _plan_rect(spec, hi[0] - lo[0], hi[1] - lo[1], opts.stand_text, opts.stand_text2, opts.stand_logo,
+                   opts.stand_base_w_mm, opts.stand_base_d_mm, spread)
+    else:
+        spec.base_r = max(spec.base_r, spread / 2 + post_r + 10.0)
+        if opts.stand_base_w_mm > 0:
+            spec.base_r = max(opts.stand_base_w_mm / 2, spread / 2 + post_r + 2.0)
+    # will it stand? the model's balance point against the base's edge
+    cm = g.origin[:2] + (com[:2] + 0.5) * g.pitch
+    x0, x1, y0, y1 = _base_box(spec)
+    if spec.shape == "rect":
+        spec.balance = float(min(cm[0] - x0, x1 - cm[0], cm[1] - y0, y1 - cm[1]))
+    else:
+        bx, by = (x0 + x1) / 2, (y0 + y1) / 2
+        spec.balance = float(spec.base_r - math.hypot(cm[0] - bx, cm[1] - by))
+    if spec.balance < 0:
+        log(f"  the model's balance point is {-spec.balance:.0f} mm outside the base: it would tip over; "
+            "make the base bigger or move the peg")
     return spec
 
 
 def _plan_rect(s: StandSpec, model_w: float, model_d: float, text: str,
-               text2: str = "", logo: str = "") -> None:
+               text2: str = "", logo: str = "", base_w: float = 0.0, base_d: float = 0.0,
+               spread: float = 0.0) -> None:
     """Rectangular plinth about half the model's footprint. With a plate (text, a second
     line and/or a logo), its front edge is bevelled back at PLATE_ANGLE and the plate
     stands out of that sloped face, so it reads when you look at the stand from the
     front. The post stays behind the bevel."""
     s.shape = "rect"
-    s.base_w = float(np.clip(0.55 * model_w, 50.0, 200.0))
-    s.base_d = float(np.clip(0.4 * model_d, 35.0, 140.0))
+    s.base_w = float(np.clip(0.55 * model_w, 50.0, 400.0))
+    s.base_d = float(np.clip(0.4 * model_d, 35.0, 300.0))
+    if base_w > 0:
+        s.base_w = float(base_w)
+    if base_d > 0:
+        s.base_d = float(base_d)
+    s.base_w = max(s.base_w, spread + 2 * s.post_r + 10.0)   # both posts on the base
     s.text = (text or "").strip()[:60]
     s.text2 = (text2 or "").strip()[:60]
     s.logo = logo if logo and Path(logo).is_file() else ""
@@ -1098,16 +1263,19 @@ TEXT_RELIEF_MM = 0.8
 
 
 def _bevel_run(s: StandSpec) -> float:
-    """Horizontal depth of the bevelled front face."""
+    """Horizontal depth of the beveled front face."""
     return (s.base_t - PLATE_FOOT) / math.tan(math.radians(PLATE_ANGLE))
 
 
 def _base_box(s: StandSpec):
-    """(x0, x1, y0, y1) of the base in model coordinates."""
+    """(x0, x1, y0, y1) of the base in model coordinates, centered on the posts."""
+    ps = all_posts(s)
+    cx = sum(p[0] for p in ps) / len(ps)
+    cy = sum(p[1] for p in ps) / len(ps)
     if s.shape == "rect":
-        y_back = s.y + (s.base_d - s.text_band) / 2
-        return s.x - s.base_w / 2, s.x + s.base_w / 2, y_back - s.base_d, y_back
-    return s.x - s.base_r, s.x + s.base_r, s.y - s.base_r, s.y + s.base_r
+        y_back = cy + (s.base_d - s.text_band) / 2
+        return cx - s.base_w / 2, cx + s.base_w / 2, y_back - s.base_d, y_back
+    return cx - s.base_r, cx + s.base_r, cy - s.base_r, cy + s.base_r
 
 
 def _plate_text(s: StandSpec):
@@ -1169,23 +1337,29 @@ def _plate_text(s: StandSpec):
 
     total_w = (logo.width if logo is not None else 0) + gap + block_w
     img = Image.new("L", (max(1, total_w), H), 0)
+    lab = np.zeros((H, max(1, total_w)), np.uint8)   # 1 logo, 2 first line, 3 second line
     x = 0
     if logo is not None:
         img.paste(logo, (0, (H - logo.height) // 2))
+        y_l = (H - logo.height) // 2
+        lab[y_l:y_l + logo.height, :logo.width][np.asarray(logo) > 127] = 1
         x = logo.width + gap
     y = (H - block_h) // 2
-    for im in rendered:
-        img.paste(im, (x + (block_w - im.width) // 2, y), im)
+    line_ids = [2, 3] if s.text else [3]
+    for im, k in zip(rendered, line_ids):
+        px = x + (block_w - im.width) // 2
+        img.paste(im, (px, y), im)
+        lab[y:y + im.height, px:px + im.width][np.asarray(im) > 127] = k
         y += im.height + int(0.18 * size)
     a = np.asarray(img) > 127
     u0 = (x0 + x1) / 2 - a.shape[1] / px_mm / 2           # centered along the plate
     v_top = face_len / 2 + a.shape[0] / px_mm / 2          # centered up the face
-    return a, px_mm, u0, v_top
+    return a, px_mm, u0, v_top, lab
 
 
 def _plate_slice(s: StandSpec, X, Y, z: float, text) -> np.ndarray:
     """Raised letters on the bevelled face, for one horizontal slice."""
-    a, px_mm, u0, v_top = text
+    a, px_mm, u0, v_top = text[:4]
     th = math.radians(PLATE_ANGLE)
     _, _, y0, _ = _base_box(s)
     # bevel plane through (y0, PLATE_FOOT), rising backwards; n points out (forward and up)
@@ -1202,7 +1376,8 @@ def _plate_slice(s: StandSpec, X, Y, z: float, text) -> np.ndarray:
 
 def _stand_slice(X, Y, z: float, s: StandSpec, height: float, peg: bool, text) -> np.ndarray:
     """One horizontal slice (2D X/Y, height z above the base bottom) of base + post (+ peg)."""
-    r = np.hypot(X - s.x, Y - s.y)
+    bx0, bx1, by0, by1 = _base_box(s)
+    r = np.hypot(X - (bx0 + bx1) / 2, Y - (by0 + by1) / 2)   # round base: from its center
     ch = min(1.5, s.base_t / 2)
     inset = max(ch - z, 0.0) + max(z - (s.base_t - ch), 0.0)  # 45 degree chamfers
     occ = np.zeros(X.shape, bool)
@@ -1217,11 +1392,13 @@ def _stand_slice(X, Y, z: float, s: StandSpec, height: float, peg: bool, text) -
             occ |= r < s.base_r - inset
     if text is not None and PLATE_FOOT <= z < s.base_t + TEXT_RELIEF_MM:
         occ |= _plate_slice(s, X, Y, z, text)
-    post_top = s.base_t + height
-    if 0 <= z < post_top:
-        occ |= r < s.post_r
-    if peg and 0 <= z < post_top + s.peg_depth - 0.4:
-        occ |= r < s.peg_r - s.clearance
+    for px, py, ptz, _ in all_posts(s):
+        rr = np.hypot(X - px, Y - py)
+        post_top = s.base_t + height + (ptz - s.top_z)
+        if 0 <= z < post_top:
+            occ |= rr < s.post_r
+        if peg and 0 <= z < post_top + s.peg_depth - 0.4:
+            occ |= rr < s.peg_r - s.clearance
     return occ
 
 
@@ -1233,11 +1410,16 @@ def _stand_occupancy(X, Y, Z, s: StandSpec, height: float, peg: bool) -> np.ndar
     return np.stack([_stand_slice(X2, Y2, float(z), s, height, peg, text) for z in zs], axis=2)
 
 
-def make_stand_mesh(s: StandSpec, height: float, pitch: float, peg: bool, smooth: bool) -> trimesh.Trimesh:
+def make_stand_mesh(s: StandSpec, height: float, pitch: float, peg: bool, smooth: bool,
+                    preview: bool = False) -> trimesh.Trimesh:
     """The stand, meshed from its exact distance field: flat faces and bevel, round post
-    and peg, and lettering/logo with smooth edges."""
+    and peg, and lettering/logo with smooth edges. preview: a coarser mesh in seconds,
+    for the viewer."""
     from skimage.measure import marching_cubes
-    pitch = min(pitch, 0.12 if _has_plate(s) else 0.2)
+    if preview:
+        pitch = 0.3 if _has_plate(s) else 0.6
+    else:
+        pitch = min(pitch, 0.12 if _has_plate(s) else 0.2)
     x0, x1, y0, y1 = _base_box(s)
     lo = np.array([x0 - 2, y0 - 2, -1.0])
     hi = np.array([x1 + 1, y1 + 1, s.base_t + height + s.peg_depth + 1])
@@ -1266,7 +1448,7 @@ def _plate_sdf(text):
     if text is None:
         return None
     from scipy import ndimage
-    a, px_mm, _, _ = text
+    a, px_mm = text[0], text[1]
     a = np.pad(a, 2)
     inside = ndimage.distance_transform_edt(a)
     outside = ndimage.distance_transform_edt(~a)
@@ -1277,7 +1459,8 @@ def _stand_sdf(X, Y, z: float, s: StandSpec, height: float, peg: bool, text, tsd
     """Signed distance (mm, negative inside) of base + post (+ peg) (+ plate lettering)
     at height z above the base bottom, over a 2D X/Y slice."""
     from scipy import ndimage
-    r = np.hypot(X - s.x, Y - s.y)
+    bx0, bx1, by0, by1 = _base_box(s)
+    r = np.hypot(X - (bx0 + bx1) / 2, Y - (by0 + by1) / 2)   # round base: from its center
     ch = min(1.5, s.base_t / 2)
     h = np.float32(1 / math.sqrt(2))
     zt, zb = z - s.base_t, -z
@@ -1299,15 +1482,17 @@ def _stand_sdf(X, Y, z: float, s: StandSpec, height: float, peg: bool, text, tsd
     else:
         e = r - s.base_r
         d = np.maximum.reduce([e, np.full_like(X, zt), np.full_like(X, zb), (e + zt + ch) * h, (e + zb + ch) * h])
-    post_top = s.base_t + height
-    d = np.minimum(d, np.maximum(r - s.post_r, np.float32(max(-z, z - post_top))))
-    if peg:
-        pr, ptop = s.peg_r - s.clearance, post_top + s.peg_depth - 0.4
-        pd = np.maximum(r - pr, np.float32(max(post_top - 1 - z, z - ptop)))
-        pd = np.maximum(pd, (r - pr + z - ptop + 0.4) * h)  # chamfered tip finds the socket
-        d = np.minimum(d, pd)
+    for px, py, ptz, _ in all_posts(s):
+        rr = np.hypot(X - px, Y - py)
+        post_top = s.base_t + height + (ptz - s.top_z)
+        d = np.minimum(d, np.maximum(rr - s.post_r, np.float32(max(-z, z - post_top))))
+        if peg:
+            pr, ptop = s.peg_r - s.clearance, post_top + s.peg_depth - 0.4
+            pd = np.maximum(rr - pr, np.float32(max(post_top - 1 - z, z - ptop)))
+            pd = np.maximum(pd, (rr - pr + z - ptop + 0.4) * h)  # chamfered tip finds the socket
+            d = np.minimum(d, pd)
     if text is not None and PLATE_FOOT - 1 <= z < s.base_t + TEXT_RELIEF_MM + 1:
-        a, px_mm, u0, v_top = text
+        a, px_mm, u0, v_top = text[:4]
         th = math.radians(PLATE_ANGLE)
         _, _, y0, _ = _base_box(s)
         dy, dz = Y - y0, z - PLATE_FOOT
@@ -1322,31 +1507,96 @@ def _stand_sdf(X, Y, z: float, s: StandSpec, height: float, peg: bool, text, tsd
     return d.astype(np.float32)
 
 
+STAND_PARTS = ("base", "logo", "text", "text2")   # stand face labels 0..3
+
+
+def stand_face_labels(verts: np.ndarray, faces: np.ndarray, s: StandSpec, base_bottom_z: float,
+                      height: float) -> np.ndarray:
+    """Which part of the stand each face is: 0 base and posts, 1 logo, 2 the plate's first
+    line, 3 its second line; -1 not the stand (an attached stand's model faces). verts in
+    the stand's model coordinates; base_bottom_z is where the base sits."""
+    c = np.asarray(verts, float)[np.asarray(faces, int)].mean(axis=1)
+    X, Y, Z = c[:, 0], c[:, 1], c[:, 2] - base_bottom_z
+    lab = np.full(len(c), -1, np.int8)
+    x0, x1, y0, y1 = _base_box(s)
+    top = s.base_t + TEXT_RELIEF_MM + 0.3
+    if s.shape == "rect":
+        lab[(X >= x0 - 0.5) & (X <= x1 + 0.5) & (Y >= y0 - 0.5) & (Y <= y1 + 0.5) & (Z <= top)] = 0
+    else:
+        lab[(np.hypot(X - (x0 + x1) / 2, Y - (y0 + y1) / 2) <= s.base_r + 0.5) & (Z <= top)] = 0
+    for px, py, ptz, _ in all_posts(s):
+        ptop = s.base_t + height + (ptz - s.top_z) + s.peg_depth
+        lab[(np.hypot(X - px, Y - py) <= s.post_r + 0.4) & (Z >= -0.5) & (Z <= ptop)] = 0
+    text = _plate_text(s)
+    if text is not None:
+        from scipy import ndimage
+        a, px_mm, u0, v_top, img = text
+        img = ndimage.maximum_filter(img, size=5)   # faces on a letter's edge still find it
+        th = math.radians(PLATE_ANGLE)
+        dy, dz = Y - y0, Z - PLATE_FOOT
+        dface = -dy * math.sin(th) + dz * math.cos(th)
+        v = dy * math.cos(th) + dz * math.sin(th)
+        col = np.floor((X - u0) * px_mm).astype(int)
+        row = np.floor((v_top - v) * px_mm).astype(int)
+        on = (dface > 0.15) & (dface < TEXT_RELIEF_MM + 0.4) & (col >= 0) & (col < img.shape[1]) \
+            & (row >= 0) & (row < img.shape[0])
+        k = np.zeros(len(c), np.int8)
+        k[on] = img[row[on], col[on]]
+        lab[on & (k > 0)] = k[on & (k > 0)]
+    return lab
+
+
+def stand_filaments(opts: "PrintOptions", colors: list[str]) -> tuple[list[str], dict[int, int]]:
+    """The filament list with the stand's colors added (a color already in the list is
+    reused), and stand part -> filament number. Unset: the base takes filament 1, the
+    logo and text the base's."""
+    colors = list(colors)
+
+    def slot(hex_: str) -> int:
+        hex_ = hex_.strip().upper()
+        for i, c in enumerate(colors):
+            if c.upper() == hex_:
+                return i + 1
+        colors.append(hex_)
+        return len(colors)
+    want = [opts.stand_base_color, opts.stand_logo_color, opts.stand_text_color, opts.stand_text2_color]
+    base = slot(want[0]) if want[0] else 1
+    out = {0: base}
+    for k in (1, 2, 3):
+        out[k] = slot(want[k]) if want[k] else base
+    return colors, out
+
+
 def cut_socket(g: Grid, s: StandSpec) -> None:
     X, Y = np.meshgrid(g.centers(0), g.centers(1), indexing="ij")
-    disk = np.hypot(X - s.x, Y - s.y) < s.peg_r + s.clearance
     z = g.centers(2)
-    mouth = s.top_z if s.mouth_z is None else min(s.mouth_z, s.top_z)
-    zmask = (z >= mouth - g.pitch) & (z < s.top_z + s.peg_depth)
-    g.v[disk[:, :, None] & zmask[None, None, :]] = False
-    r, bottom, top = s.peg_r + s.clearance, mouth - 3.0, s.top_z + s.peg_depth
-    g.cut_sdf.append(lambda X, Y, z: np.maximum(np.hypot(X - s.x, Y - s.y) - r,
-                                                np.float32(max(bottom - z, z - top))))
+    r = s.peg_r + s.clearance
+    for px, py, ptz, pmz in all_posts(s):
+        disk = np.hypot(X - px, Y - py) < r
+        mouth = ptz if pmz is None else min(pmz, ptz)
+        zmask = (z >= mouth - g.pitch) & (z < ptz + s.peg_depth)
+        g.v[disk[:, :, None] & zmask[None, None, :]] = False
+        bottom, top = mouth - 3.0, ptz + s.peg_depth
+        g.cut_sdf.append(lambda X, Y, z, px=px, py=py, bottom=bottom, top=top:
+                         np.maximum(np.hypot(X - px, Y - py) - r, np.float32(max(bottom - z, z - top))))
 
 
 def socket_reinforcement(g: Grid, s: StandSpec, wall_mm: float) -> np.ndarray:
     X, Y = np.meshgrid(g.centers(0), g.centers(1), indexing="ij")
-    disk = np.hypot(X - s.x, Y - s.y) < s.peg_r + s.clearance + wall_mm + 1.0
     z = g.centers(2)
-    zmask = z < s.top_z + s.peg_depth + wall_mm + 1.0
-    return disk[:, :, None] & zmask[None, None, :]
+    keep = np.zeros(g.shape, bool)
+    for px, py, ptz, _ in all_posts(s):
+        disk = np.hypot(X - px, Y - py) < s.peg_r + s.clearance + wall_mm + 1.0
+        zmask = z < ptz + s.peg_depth + wall_mm + 1.0
+        keep |= disk[:, :, None] & zmask[None, None, :]
+    return keep
 
 
 def fuse_stand(g: Grid, s: StandSpec, height: float) -> Grid:
     """Attached stand: extend the grid downward and add base + post into the model."""
     below = int(math.ceil((height + s.base_t + 1) / g.pitch))
     x0, x1, y0, y1 = _base_box(s)
-    reach = max(s.base_r, s.x - x0, x1 - s.x, s.y - y0, y1 - s.y) if s.shape == "rect" else s.base_r
+    reach = max(s.x - x0, x1 - s.x, s.y - y0, y1 - s.y)
     grow = int(math.ceil(reach / g.pitch))
     new = Grid.__new__(Grid)
     new.pitch = g.pitch
@@ -1442,7 +1692,8 @@ def prepare(glb: Path, out: Path, opts: PrintOptions, log=print) -> dict:
     parts = load_parts(glb, opts.exclude_nodes)
     log(f"  {len(parts)} parts loaded")
     real = real_size(parts)
-    scale = _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale)
+    scale = _orient_and_scale(parts, opts.size_mm, opts.tilt_deg, opts.scale, opts.roll_deg,
+                              not opts.figure)
     if opts.scale > 0:  # stand and peg sizes follow the printed size
         lo, hi = _bounds(parts)
         opts = replace(opts, size_mm=float(np.max(hi - lo)))
@@ -1464,6 +1715,9 @@ def prepare(glb: Path, out: Path, opts: PrintOptions, log=print) -> dict:
         report["joined"] = connect_pieces(g, min_mm, max(JOIN_GAP_MM, JOIN_GAP_SHARE * opts.size_mm), log)
         report["loose_removed"] = drop_loose_bits(g, log)
         spec = plan_stand(g, opts, log) if opts.stand != "none" else None
+        if spec is not None:
+            report["posts"] = len(all_posts(spec))
+            report["balance_mm"] = None if spec.balance is None else round(spec.balance, 1)
         stand_h = opts.stand_height_mm
         if spec and opts.figure:
             # A figure stands on the base: the base top sits at its lowest point (the
@@ -1485,13 +1739,30 @@ def prepare(glb: Path, out: Path, opts: PrintOptions, log=print) -> dict:
             stand = make_stand_mesh(spec, stand_h, g.pitch, peg=True, smooth=opts.smooth)
             bodies.append(("stand", decimate(stand, STAND_MAX_FACES, log)))
         painted = None
+        face_paint = {}
         if opts.paint_colors > 0 and fmt == "3mf":
             # before laying the bodies out: the model still sits where the original parts are
             painted = paint_faces(mesh, parts, opts.paint_colors, log)
+            face_paint["model"] = painted[0]
+            if spec:
+                colors, part_slot = stand_filaments(opts, painted[1])
+                painted = (painted[0], colors)
+                lookup = np.array([part_slot[k] for k in range(4)], np.int32)
+                if opts.stand == "attached":
+                    base_bottom = spec.top_z - stand_h - spec.base_t
+                    lab = stand_face_labels(mesh.vertices, mesh.faces, spec, base_bottom, stand_h)
+                    fp = np.asarray(face_paint["model"]).copy()
+                    fp[lab >= 0] = lookup[lab[lab >= 0]]
+                    face_paint["model"] = fp
+                elif len(bodies) > 1:
+                    sm = bodies[1][1]
+                    lab = stand_face_labels(sm.vertices, sm.faces, spec, 0.0, stand_h)
+                    face_paint["stand"] = lookup[np.maximum(lab, 0)]
         _layout(bodies)
         if painted:
-            files = [str(write_bambu_3mf(out, bodies, {"model": painted[0]}, painted[1], out.stem))]
+            files = [str(write_bambu_3mf(out, bodies, face_paint, painted[1], out.stem))]
             report["colors"] = painted[1]
+            report["color_names"] = [closest_filament(c) for c in painted[1]]
         else:
             files = write_bodies(bodies, out, fmt)
         report.update(files=files, bodies=len(bodies),

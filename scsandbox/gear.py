@@ -22,7 +22,9 @@ part name, poses stacked: <stem>.gearup.glb, <stem>.wout.glb, <stem>.gearup.win.
 from __future__ import annotations
 
 import json
+import os
 import re
+import threading
 import subprocess
 from pathlib import Path
 
@@ -31,7 +33,7 @@ import numpy as np
 from . import blendertools, models, tools
 from .installs import Install
 
-POSE_VERSION = 15
+POSE_VERSION = 19
 # pose kind -> (cache name, file suffix, what it is in messages)
 KINDS = {"gear": ("gearup", "gearup", "landing gear"),
          "weapons_out": ("weapons_out", "wout", "deployable weapons"),
@@ -138,6 +140,16 @@ def _key(name: str) -> str:
     return n.lower()
 
 
+_SIDES = {"left": "right", "right": "left", "Left": "Right", "Right": "Left",
+          "LEFT": "RIGHT", "RIGHT": "LEFT"}
+
+
+def _mirror_name(name: str) -> str | None:
+    """The other side's name for a left or right part, or None for a centered one."""
+    out = re.sub(r"left|right|Left|Right|LEFT|RIGHT", lambda m: _SIDES[m.group(0)], name)
+    return out if out != name else None
+
+
 def _fit(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
     """Rigid transform (4x4) taking points src onto dst (Kabsch)."""
     cs, cd = src.mean(0), dst.mean(0)
@@ -227,6 +239,16 @@ def apply_pose(glb: Path, out: Path, pose: dict, log=print, hide_gear: bool = Tr
             return top
 
         hidden = ({gear_item(k) for k in target} - {None}) if hide_gear else set()
+        if hide_gear and not hidden and target:
+            # the clip only reached the doors (the F7A Mk I): every gear leg goes inside
+            hidden = {k for k in order if gear_item(k) == k}
+        # A leg the clip doesn't reach (the Mk I Hornets' right wing gear is one solid
+        # mesh with no bones) goes with its mirror on the other side.
+        for h in list(hidden):
+            twin = _mirror_name(nodes[h].get("name", ""))
+            for k in by_key.get(_key(twin), []) if twin else []:
+                if gear_item(k) == k:
+                    hidden.add(k)
         drop = set()
         for h in hidden:
             todo = [h]
@@ -353,36 +375,38 @@ def posed_glb(install: Install, settings: dict, asset: dict, variant: str, gear_
     moved_before: dict = {}   # Blender object -> where an earlier pose in the stack left it
     for kind in kinds:
         out = glb.with_name(glb.name[:-4] + f".{KINDS[kind][1]}.glb")
-        if out.exists() and not _pose_current(install, asset, kind):
-            out.unlink(missing_ok=True)  # worked out by an older version of the pose rules
-        try:
-            if out.exists() and _pose_path(install, asset, kind).stat().st_mtime > out.stat().st_mtime:
-                out.unlink(missing_ok=True)  # the pose was worked out again since
-        except (OSError, AttributeError, TypeError):
-            pass
         pose = None
-        if not (out.exists() and out.stat().st_mtime >= glb.stat().st_mtime):
+        # one writer per file: the viewer, the peg preview and a print can ask for the
+        # same pose at once, and Windows won't replace a file another job has open
+        with models._lock(str(out)):
             try:
-                pose = pose_for(install, settings, asset, log, kind=kind)
-                tmp = out.with_name(out.name + ".part")
-                n = apply_pose(glb, tmp, pose, log, hide_gear=kind == "gear", skip=moved_before)
-                if n == 0:
-                    tmp.unlink(missing_ok=True)
-                    raise NoPose(f"none of the {KINDS[kind][2]} parts were found in the model")
-            except (NoPose, tools.ToolError) as e:
-                if kind == "gear" and exported_gear_up(install, asset):
-                    continue  # the export already has the gear up (Reclaimer, Stingray)
-                if kind in ("landed", "closed"):  # extras: the plain model will do
-                    log(f"landed shape skipped: {e}")
-                    continue
-                if isinstance(e, NoPose):
-                    e.kind = kind
-                raise
-            tmp.replace(out)
-            try:  # a borrowed clip can leave a gear piece hanging off the hull
-                models.fix_floating_parts(out, log)
-            except Exception as e:  # noqa: BLE001
-                log(f"floating parts check skipped: {e}")
+                if out.exists() and (not _pose_current(install, asset, kind)
+                                     or _pose_path(install, asset, kind).stat().st_mtime > out.stat().st_mtime):
+                    out.unlink(missing_ok=True)  # worked out by older pose rules, or again since
+            except (OSError, AttributeError, TypeError):
+                pass
+            if not (out.exists() and out.stat().st_mtime >= glb.stat().st_mtime):
+                try:
+                    pose = pose_for(install, settings, asset, log, kind=kind)
+                    tmp = out.with_name(out.name + f".{os.getpid()}.{threading.get_ident()}.part")
+                    n = apply_pose(glb, tmp, pose, log, hide_gear=kind == "gear", skip=moved_before)
+                    if n == 0:
+                        tmp.unlink(missing_ok=True)
+                        raise NoPose(f"none of the {KINDS[kind][2]} parts were found in the model")
+                except (NoPose, tools.ToolError) as e:
+                    if kind == "gear" and exported_gear_up(install, asset):
+                        continue  # the export already has the gear up (Reclaimer, Stingray)
+                    if kind in ("landed", "closed"):  # extras: the plain model will do
+                        log(f"landed shape skipped: {e}")
+                        continue
+                    if isinstance(e, NoPose):
+                        e.kind = kind
+                    raise
+                models.replace_file(tmp, out)
+                try:  # a borrowed clip can leave a gear piece hanging off the hull
+                    models.fix_floating_parts(out, log)
+                except Exception as e:  # noqa: BLE001
+                    log(f"floating parts check skipped: {e}")
         try:
             pose = pose or pose_for(install, settings, asset, lambda *_: None, kind=kind)
             for name, mv in (pose["blender"].get("objects") or {}).items():

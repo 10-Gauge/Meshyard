@@ -166,3 +166,9 @@ def test_gear_down_shows_the_landed_shape_once_it_is_known(tmp_path, monkeypatch
     sc = trimesh.load(out, force="scene")
     assert abs(sc.graph.get("anim_cannon_left")[0][1, 3] - 1) < 1e-6   # folded
     assert "Ship_LandingGear_Front_Anim" in sc.graph.nodes_geometry   # gear still down
+
+
+def test_mirror_name_swaps_sides():
+    assert gear._mirror_name("anvil_hornet_left_wing_landinggear.cdf") == "anvil_hornet_right_wing_landinggear.cdf"
+    assert gear._mirror_name("LG_BackRight_Foot") == "LG_BackLeft_Foot"
+    assert gear._mirror_name("anvil_hornet_front_landinggear.cdf") is None
