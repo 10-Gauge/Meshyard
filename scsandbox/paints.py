@@ -31,7 +31,7 @@ METAL_SPEC = 0.2
 # how dark a stencil's marked areas make the paint under them (1 = no change)
 STENCIL_TONE = 0.45
 GLASS_TINT = 0.3      # how much of the palette glass color the pane shows
-LIVERY_VERSION = 22   # bump to repaint cached painted models
+LIVERY_VERSION = 23   # bump to repaint cached painted models
 DEFAULT = "default"
 # an exported color counts as the ship's default paint when every channel is this close
 MATCH = 0.02
@@ -291,17 +291,16 @@ def _add_texture(doc: dict, bin_: bytes, png: bytes) -> tuple[bytes, int]:
     return bin_, len(textures) - 1
 
 
-def _stencil_pixels(mask_png: Path, flip: bool):
-    """The stencil as an RGBA float array, upside down for a stencil on the second uv set
-    (the export flips the first set's v but not the second's, so unflipped the Idris
-    Sharktooth's tiger stripes land as scattered blotches)."""
+def _stencil_pixels(mask_png: Path):
+    """The stencil as an RGBA float array, as the image stores it: the second uv set reads
+    it the right way up (flipped, the Idris Sharktooth's camo landed on its underside and
+    its beige on top of the nose)."""
     import numpy as np
     from PIL import Image
-    a = np.asarray(Image.open(mask_png).convert("RGBA"), float) / 255.0
-    return np.flipud(a) if flip else a
+    return np.asarray(Image.open(mask_png).convert("RGBA"), float) / 255.0
 
 
-def stencil_tone(mask_png: Path, override: float, flip: bool = False) -> bytes | None:
+def stencil_tone(mask_png: Path, override: float) -> bytes | None:
     """The stencil as a grey multiplier image (sRGB-encoded so it reads back linear):
     the marked areas of the stencil's first `override` channels darken the paint under
     them, the way StarBreaker's add-on reads the game's stencils. None if unreadable."""
@@ -310,7 +309,7 @@ def stencil_tone(mask_png: Path, override: float, flip: bool = False) -> bytes |
     import numpy as np
     from PIL import Image
     try:
-        a = _stencil_pixels(mask_png, flip)
+        a = _stencil_pixels(mask_png)
     except (OSError, ValueError):
         return None
     tone = np.ones(a.shape[:2])
@@ -430,20 +429,32 @@ def _stencil_colors(sm: dict, pal: dict) -> list[list[float]]:
             for c in range(3)]
 
 
-def stencil_palette(mask_png: Path, base: list[float], colors: list[list[float]], opacity: float,
-                    flip: bool = False) -> bytes | None:
-    """Base color image for a tint-override stencil: the panel's own color, with each
-    stencil channel's areas in its color (blue first, red on top, so the Sharktooth's
-    outlines sit over its stripes). A channel flat all over marks nothing."""
+def stencil_palette(mask_png: Path, base: list[float], colors: list[list[float]], opacity: float) -> bytes | None:
+    """Base color image for a tint-override stencil.
+
+    A camo "generator" stencil (blue marks the camo, green its pattern inside the blue:
+    the Idris Sharktooth) paints the camo in the tertiary paint, black on the Sharktooth,
+    and the pattern part way back toward the panel's own color: the dark grey hull with
+    lighter grey tiger stripes the game shows. Its red only edges the camo and paints
+    nothing. Other stencils lay each channel's areas in its color (blue first, red on top:
+    the Avenger's grey black red camo in three greys). A channel flat all over marks
+    nothing."""
     import io
 
     import numpy as np
     from PIL import Image
     try:
-        a = _stencil_pixels(mask_png, flip)
+        a = _stencil_pixels(mask_png)
     except (OSError, ValueError):
         return None
     col = np.ones(a.shape[:2] + (3,)) * np.asarray(base[:3])
+    if _generator_stencil(a):
+        blue, green = (a[..., 2] * opacity)[..., None], a[..., 1:2] * a[..., 2:3]
+        dark = np.asarray(colors[2][:3])
+        light = dark + (np.asarray(base[:3]) - dark) * CAMO_PATTERN_LIFT
+        col = col * (1 - blue) + dark * blue
+        col = col * (1 - green) + light * green
+        colors = []
     for c in reversed(range(len(colors))):
         ch = a[..., c]
         if ch.max() - ch.min() < 0.02:
@@ -456,8 +467,22 @@ def stencil_palette(mask_png: Path, base: list[float], colors: list[list[float]]
     return buf.getvalue()
 
 
-def stencil_flecks(mask_png: Path, base: list[float], colors: list[list[float]], opacity: float,
-                   flip: bool = False):
+# how far a generator stencil's pattern lifts the camo back toward the panel color
+CAMO_PATTERN_LIFT = 0.2
+
+
+def _generator_stencil(a) -> bool:
+    """Whether a stencil marks its camo in blue with the pattern in green inside it (the
+    Idris Sharktooth's): both channels vary and nearly all the green lies on blue."""
+    import numpy as np
+    b, g = a[..., 2], a[..., 1]
+    if np.ptp(b) < 0.02 or np.ptp(g) < 0.02:
+        return False
+    green = g > 0.5
+    return bool(green.any()) and float((green & (b > 0.5)).sum()) / float(green.sum()) > 0.95
+
+
+def stencil_flecks(mask_png: Path, base: list[float], colors: list[list[float]], opacity: float):
     """Base color and metal/roughness images for a fleck stencil: the paint, with the
     stencil's first two channels' areas in their spec colors as polished metal."""
     import io
@@ -465,7 +490,7 @@ def stencil_flecks(mask_png: Path, base: list[float], colors: list[list[float]],
     import numpy as np
     from PIL import Image
     try:
-        a = _stencil_pixels(mask_png, flip)
+        a = _stencil_pixels(mask_png)
     except (OSError, ValueError):
         return None, None
     col = np.ones(a.shape[:2] + (3,)) * np.asarray(base[:3])
@@ -616,17 +641,15 @@ def repaint(doc: dict, bin_: bytes, old: dict, new: dict, sources=None, root: Pa
                 uv = 1 if _param(sm, "UseUV2ForStencil", 0) > 0.5 else 0
                 flecks = _stencil_specs(sm)
                 if flecks:
-                    png, mr = stencil_flecks(root / st, pbr.get("baseColorFactor") or [1, 1, 1, 1], *flecks,
-                                             flip=uv == 1)
+                    png, mr = stencil_flecks(root / st, pbr.get("baseColorFactor") or [1, 1, 1, 1], *flecks)
                     pbr["baseColorFactor"] = [1.0, 1.0, 1.0, (pbr.get("baseColorFactor") or [1, 1, 1, 1])[3]]
                 elif _param(sm, "StencilTintOverride", 0) > 0:
                     png, mr = stencil_palette(root / st, pbr.get("baseColorFactor") or [1, 1, 1, 1],
                                               _stencil_colors(sm, new),
-                                              max(0.0, min(1.0, _param(sm, "StencilOpacity", 1.0))),
-                                              flip=uv == 1), None
+                                              max(0.0, min(1.0, _param(sm, "StencilOpacity", 1.0)))), None
                     pbr["baseColorFactor"] = [1.0, 1.0, 1.0, (pbr.get("baseColorFactor") or [1, 1, 1, 1])[3]]
                 else:
-                    png, mr = stencil_tone(root / st, 1, flip=uv == 1), None
+                    png, mr = stencil_tone(root / st, 1), None
                 if png:
                     tiling = _param(sm, "StencilTiling", 1.0) or 1.0
                     ext = {"KHR_texture_transform": {"scale": [tiling, tiling]}}
@@ -815,12 +838,12 @@ def livery_faces(install: Install, settings: dict, asset: dict, pkg: Path, geo_p
 
 # Stencils this narrow came out of the paint package at an eighth of their size: a fine
 # camo (the Idris Sharktooth's tiger stripes) blurs into flat grey there.
-STENCIL_MIN_PX = 512
+STENCIL_MIN_PX = 1024
 
 
 def sharpen_stencils(install: Install, settings: dict, root: Path, sources, log=print) -> int:
-    """Swap the package's small stencil images for larger ones decoded from the game
-    files (one mip down from full size). Returns how many were replaced."""
+    """Swap the package's small stencil images for the full-size ones decoded from the
+    game files. Returns how many were replaced."""
     from PIL import Image
     _, base, liv = sources
     paths = {_texture(sm, "stencil", "TexSlot7") for sm in [*base.values(), *(liv or {}).values()]}

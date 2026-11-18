@@ -179,23 +179,43 @@ def test_fleck_stencils_color_the_marked_areas_and_make_them_metal(tmp_path):
     assert m[0, 0, 2] == 255 and m[3, 0, 2] == 0         # metal only where marked
 
 
-def test_tint_override_stencil_paints_the_palette_colors_upside_down_on_uv2(tmp_path):
-    import io
-
+def _stencil_png(path, blue, green):
     import numpy as np
     from PIL import Image
     mask = np.zeros((4, 4, 4), np.uint8)
     mask[..., 3] = 255
-    mask[0, :, 2] = 255            # blue on the image's top row: the tertiary paint
-    mask[0, :1, 1] = 255           # green over it in one corner: the secondary paint
-    Image.fromarray(mask, "RGBA").save(tmp_path / "s.png")
+    for r, c in blue:
+        mask[r, c, 2] = 255
+    for r, c in green:
+        mask[r, c, 1] = 255
+    Image.fromarray(mask, "RGBA").save(path)
+
+
+def test_camo_generator_stencil_paints_dark_camo_with_lighter_stripes(tmp_path):
+    import io
+
+    import numpy as np
+    from PIL import Image
+    # blue marks the camo (top row), green its pattern inside the blue (one corner)
+    _stencil_png(tmp_path / "s.png", [(0, c) for c in range(4)], [(0, 0)])
+    cols = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]]          # tertiary black
+    img = np.asarray(Image.open(io.BytesIO(paints.stencil_palette(tmp_path / "s.png", [0.5, 0.5, 0.5], cols, 1.0))))
+    assert list(img[0, 1]) == [0, 0, 0]                  # camo: the tertiary paint
+    assert 0 < img[0, 0, 0] < 188 and img[0, 0, 0] == img[0, 0, 2]   # stripe: lifted toward the panel
+    assert list(img[3, 0]) == [188, 188, 188]            # unmarked: the panel's own color, right way up
+
+
+def test_other_tint_override_stencils_lay_each_channel_in_its_paint(tmp_path):
+    import io
+
+    import numpy as np
+    from PIL import Image
+    # green outside the blue: not a camo generator
+    _stencil_png(tmp_path / "s.png", [(0, 1)], [(1, 0), (1, 1)])
     cols = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
     img = np.asarray(Image.open(io.BytesIO(paints.stencil_palette(tmp_path / "s.png", [0.5, 0.5, 0.5], cols, 1.0))))
-    assert list(img[0, 1]) == [0, 0, 255] and list(img[0, 0]) == [0, 255, 0]
-    assert list(img[3, 0]) == [188, 188, 188]          # unmarked: the panel's own color
-    flipped = np.asarray(Image.open(io.BytesIO(
-        paints.stencil_palette(tmp_path / "s.png", [0.5, 0.5, 0.5], cols, 1.0, flip=True))))
-    assert list(flipped[3, 1]) == [0, 0, 255]
+    assert list(img[0, 1]) == [0, 0, 255] and list(img[1, 0]) == [0, 255, 0]
+    assert list(img[3, 0]) == [188, 188, 188]
 
 
 def test_panel_tint_scales_its_palette_color():
