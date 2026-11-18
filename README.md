@@ -4,7 +4,7 @@ Browse the vehicles, weapons, props and armor inside a game you own, look at the
 
 Meshyard reads the packed data files that CryEngine games ship with (`.p4k` archives holding `.cgf`, `.cga` and `.skin` models). Point it at a game's data file, or let it find one for you, and it builds a searchable list of everything inside.
 
-![The Browse page: search results on the left, the 3D view in the middle, and the paint, landing gear, weapons, VTOL, flight mode and 3D print options on the right](docs/images/app-browse.png)
+![The Browse page with the Kruger S-65 Stingray selected: Stingray search results on the left, the ship in the middle in its red and dark grey stock paint with landing gear up, weapons deployed and flight mode on, and its details, paint, landing gear, weapons, VTOL, flight mode and 3D print settings on the right](docs/images/app-browse.png)
 
 It runs on your own PC against your own copy of the game. It only ever reads the game's data file. It doesn't talk to any game servers, and it never touches the game client or its anti-cheat. Anything you pull out of a game belongs to whoever made that game, so keep it for your own use and don't share the files around.
 
