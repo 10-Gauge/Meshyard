@@ -444,8 +444,13 @@ public sealed partial class Inspector : UserControl
 
     void StandView_Toggled(object sender, RoutedEventArgs e)
     {
-        if (_state != null) _ = _state.Viewer.StandView(StandViewSwitch.IsOn);
+        if (_state == null) return;
+        _ = _state.Viewer.StandView(StandViewSwitch.IsOn);
+        // ask for the stand again so the view never shows a stale or missing one
+        if (StandViewSwitch.IsOn) RefreshPeg(0);
     }
+
+    void RefreshStand_Click(object sender, RoutedEventArgs e) => RefreshPeg(0);
 
     // Where the stand's peg will go with the current settings, drawn in the viewer so the
     // Peg forward / Peg right offsets can be set before exporting. Asked again (after a
@@ -496,9 +501,10 @@ public sealed partial class Inspector : UserControl
             await s.Viewer.Peg(shown ? r : null);
             PegNote.Text = shown ? "The peg is shown in orange in the viewer. " + StandLine(r) : "";
         }
-        catch
+        catch (Exception ex)
         {
-            if (seq == _pegSeq) PegNote.Text = "";
+            // say so: a silent failure left "Show on stand" doing nothing
+            if (seq == _pegSeq) PegNote.Text = "Couldn't build the stand preview: " + LastLines(ex.Message);
         }
     }
 
@@ -510,7 +516,7 @@ public sealed partial class Inspector : UserControl
         PegFwdBox.IsEnabled = !none;
         PegSideBox.IsEnabled = !none;
         PlateText.IsEnabled = PlateText2.IsEnabled = LogoBox.IsEnabled = ScaleSwitch.IsEnabled = !none && Picked(ShapeBox) == "rect";
-        PostsBox.IsEnabled = BaseWBox.IsEnabled = !none;
+        PostsBox.IsEnabled = BaseWBox.IsEnabled = RefreshStandButton.IsEnabled = !none;
         BaseDBox.IsEnabled = !none && Picked(ShapeBox) == "rect";
         // the stand's colors go into a painted 3MF only
         var painted = Picked(FormatBox) == "3mf" && Picked(ColorsBox) is var c && c != "" && c != "0";
