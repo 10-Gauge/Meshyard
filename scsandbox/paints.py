@@ -31,7 +31,7 @@ METAL_SPEC = 0.2
 # how dark a stencil's marked areas make the paint under them (1 = no change)
 STENCIL_TONE = 0.45
 GLASS_TINT = 0.3      # how much of the palette glass color the pane shows
-LIVERY_VERSION = 24   # bump to repaint cached painted models
+LIVERY_VERSION = 25   # bump to repaint cached painted models
 DEFAULT = "default"
 # an exported color counts as the ship's default paint when every channel is this close
 MATCH = 0.02
@@ -391,8 +391,35 @@ def _palette_layer_tint(sm: dict | None) -> list[float]:
     return [1.0, 1.0, 1.0]
 
 
-def _split_mounted_materials(doc: dict, prefix: str) -> set[int]:
-    """Give the parts mounted on hardpoints that use the hull's materials their own
+def mounted_items(doc: dict) -> set[str]:
+    """Names of the items mounted on hardpoints (the hardpoints' children)."""
+    nodes = doc.get("nodes", [])
+    return {nodes[c].get("name") or "" for nd in nodes if (nd.get("name") or "").lower().startswith("hardpoint_")
+            for c in nd.get("children", [])} - {""}
+
+
+def own_paint_items(install: Install, doc: dict, paint: str) -> set[str]:
+    """The mounted items whose own record has a geometry entry for this paint: in the
+    game they wear their own material in its colors, not the hull's livery."""
+    tag = re.compile(r'"Tags"\s*:\s*"(?:[^"]*\s)?' + re.escape(paint) + r'(?:\s[^"]*)?"')
+    found = set()
+    con = catalog.connect(install)
+    try:
+        for name in mounted_items(doc):
+            row = con.execute("SELECT record_path FROM assets WHERE record = ? COLLATE NOCASE LIMIT 1", (name,)).fetchone()
+            p = _records(install) / (row[0] if row else "")
+            try:
+                if row and row[0] and tag.search(p.read_text(encoding="utf-8")):
+                    found.add(name)
+            except OSError:
+                pass
+    finally:
+        con.close()
+    return found
+
+
+def _split_mounted_materials(doc: dict, prefix: str, items: set[str]) -> set[int]:
+    """Give the parts of the named mounted items that use the hull's materials their own
     copies of them, so the hull's livery can skip them. Returns the copies' indices."""
     nodes, meshes, mats = doc.get("nodes", []), doc.get("meshes", []), doc.get("materials", [])
     parent = {c: i for i, nd in enumerate(nodes) for c in nd.get("children", [])}
@@ -403,7 +430,7 @@ def _split_mounted_materials(doc: dict, prefix: str) -> set[int]:
             seen.add(i)
             p = parent[i]
             if (nodes[p].get("name") or "").lower().startswith("hardpoint_"):
-                return True
+                return (nodes[i].get("name") or "") in items
             i = p
         return False
     users: dict[int, set] = {}
@@ -618,7 +645,8 @@ def _neutral_base_texture(doc: dict, bin_: bytes, pbr: dict, cache: dict) -> byt
     return bin_
 
 
-def repaint(doc: dict, bin_: bytes, old: dict, new: dict, sources=None, root: Path | None = None) -> tuple[bytes, int]:
+def repaint(doc: dict, bin_: bytes, old: dict, new: dict, sources=None, root: Path | None = None,
+            own_paint: set[str] | None = None) -> tuple[bytes, int]:
     """Paint a glTF document: hull materials follow the livery's material (its palette
     routing, stencil and textures) when sources are known; other paintable materials
     (gear, attachments in the ship's palette) swap the default colors for the paint's.
@@ -627,7 +655,7 @@ def repaint(doc: dict, bin_: bytes, old: dict, new: dict, sources=None, root: Pa
     prefix = f"{stem.lower()}_mtl_" if stem else None
     changed = 0
     neutral: dict = {}   # texture index -> its neutral copy
-    mounted = _split_mounted_materials(doc, prefix) if prefix and liv is not None else set()
+    mounted = _split_mounted_materials(doc, prefix, own_paint or set()) if prefix and liv is not None else set()
     for mi, m in enumerate(doc.get("materials", [])):
         ex = m.get("extras") or {}
         pbr = m.setdefault("pbrMetallicRoughness", {})
@@ -645,9 +673,9 @@ def repaint(doc: dict, bin_: bytes, old: dict, new: dict, sources=None, root: Pa
                 changed += 1
             continue
         b = base.get(sub)
-        # parts mounted on hardpoints (the Idris's railgun and turrets) take the paint's
-        # colors on the ship's plain material: the livery's stencil and artwork are laid
-        # out for the hull alone
+        # parts mounted on hardpoints whose own record names this paint (the Idris's
+        # railgun and torpedo rack) take its colors on their plain material, as the game
+        # does; the rest (its hangar doors) wear the hull's livery
         sm = liv.get(sub) if liv is not None and mi not in mounted else b
         if sm is None:
             continue
@@ -939,7 +967,8 @@ def _repainted(install: Install, settings: dict, asset: dict, glb: Path, paint: 
         if sources:
             sharpen_stencils(install, settings, pkg.parent.parent, sources, log)
         doc, bin_, version = models._read_glb(glb)
-        bin_, n = repaint(doc, bin_, old, new, sources, pkg.parent.parent if pkg else None)
+        own = own_paint_items(install, doc, paint) if sources and sources[2] is not None else set()
+        bin_, n = repaint(doc, bin_, old, new, sources, pkg.parent.parent if pkg else None, own)
         if sources and sources[2] is not None:
             names = _activated(sources[1], sources[2])
             geo = _paint_geometry(_record_json(install, asset) or {}, paint) if names else ""

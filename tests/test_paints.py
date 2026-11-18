@@ -237,7 +237,7 @@ def test_parts_on_hardpoints_get_their_own_copy_of_hull_materials():
                      {"name": "hardpoint_nose_railgun", "children": [3]}, {"name": "Railgun", "mesh": 1}],
            "meshes": [{"primitives": [{"material": 0}]}, {"primitives": [{"material": 0}, {"material": 1}]}],
            "materials": [{"name": "Idris_mtl_Dark_Panel_07"}, {"name": "railgun_own"}]}
-    copies = paints._split_mounted_materials(doc, "idris_mtl_")
+    copies = paints._split_mounted_materials(doc, "idris_mtl_", {"Railgun"})
     assert doc["meshes"][0]["primitives"][0]["material"] == 0          # the hull keeps its material
     moved = doc["meshes"][1]["primitives"][0]["material"]
     assert moved in copies and doc["materials"][moved]["name"].endswith("_mounted")
