@@ -31,7 +31,7 @@ METAL_SPEC = 0.2
 # how dark a stencil's marked areas make the paint under them (1 = no change)
 STENCIL_TONE = 0.45
 GLASS_TINT = 0.3      # how much of the palette glass color the pane shows
-LIVERY_VERSION = 25   # bump to repaint cached painted models
+LIVERY_VERSION = 26   # bump to repaint cached painted models
 DEFAULT = "default"
 # an exported color counts as the ship's default paint when every channel is this close
 MATCH = 0.02
@@ -535,7 +535,7 @@ def stencil_palette(mask_png: Path, base: list[float], colors: list[list[float]]
 
 
 # how far a generator stencil's pattern lifts the camo back toward the panel color
-CAMO_PATTERN_LIFT = 0.2
+CAMO_PATTERN_LIFT = 0.1
 
 
 def _crisp(a, scale: int):
@@ -547,7 +547,7 @@ def _crisp(a, scale: int):
     out = np.empty((h * scale, w * scale, a.shape[2]))
     for c in range(a.shape[2]):
         ch = Image.fromarray((a[..., c] * 255).astype(np.uint8)).resize((w * scale, h * scale), Image.BICUBIC)
-        x = np.clip((np.asarray(ch, float) / 255.0 - 0.3) / 0.4, 0, 1)
+        x = np.clip((np.asarray(ch, float) / 255.0 - 0.45) / 0.3, 0, 1)
         out[..., c] = x * x * (3 - 2 * x)          # smoothstep around the middle
     return out
 
