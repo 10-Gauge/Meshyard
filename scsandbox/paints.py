@@ -31,7 +31,7 @@ METAL_SPEC = 0.2
 # how dark a stencil's marked areas make the paint under them (1 = no change)
 STENCIL_TONE = 0.45
 GLASS_TINT = 0.3      # how much of the palette glass color the pane shows
-LIVERY_VERSION = 26   # bump to repaint cached painted models
+LIVERY_VERSION = 27   # bump to repaint cached painted models
 DEFAULT = "default"
 # an exported color counts as the ship's default paint when every channel is this close
 MATCH = 0.02
@@ -399,17 +399,23 @@ def mounted_items(doc: dict) -> set[str]:
 
 
 def own_paint_items(install: Install, doc: dict, paint: str) -> set[str]:
-    """The mounted items whose own record has a geometry entry for this paint: in the
-    game they wear their own material in its colors, not the hull's livery."""
+    """The mounted items that skip the hull's livery: everything but the doors (hull
+    panels that open: the Idris's hangar doors carry the camo and the shark's mouth),
+    and any door whose own record has a geometry entry for this paint. In the game the
+    Sharktooth's railgun, torpedo rack and turrets wear their own material in its
+    colors."""
     tag = re.compile(r'"Tags"\s*:\s*"(?:[^"]*\s)?' + re.escape(paint) + r'(?:\s[^"]*)?"')
     found = set()
     con = catalog.connect(install)
     try:
         for name in mounted_items(doc):
             row = con.execute("SELECT record_path FROM assets WHERE record = ? COLLATE NOCASE LIMIT 1", (name,)).fetchone()
-            p = _records(install) / (row[0] if row else "")
+            rel = (row[0] if row else "") or ""
+            if "/doors/" not in rel.replace("\\", "/").lower() and not name.lower().startswith("door_"):
+                found.add(name)
+                continue
             try:
-                if row and row[0] and tag.search(p.read_text(encoding="utf-8")):
+                if tag.search((_records(install) / rel).read_text(encoding="utf-8")):
                     found.add(name)
             except OSError:
                 pass
@@ -511,7 +517,7 @@ def stencil_palette(mask_png: Path, base: list[float], colors: list[list[float]]
     except (OSError, ValueError):
         return None
     if _generator_stencil(a):
-        a = _crisp(a, 2)
+        a = _crisp(a, 4)
     col = np.ones(a.shape[:2] + (3,)) * np.asarray(base[:3])
     if _generator_stencil(a):
         blue, green = (a[..., 2] * opacity)[..., None], a[..., 1:2] * a[..., 2:3]
@@ -535,7 +541,7 @@ def stencil_palette(mask_png: Path, base: list[float], colors: list[list[float]]
 
 
 # how far a generator stencil's pattern lifts the camo back toward the panel color
-CAMO_PATTERN_LIFT = 0.1
+CAMO_PATTERN_LIFT = 0.15
 
 
 def _crisp(a, scale: int):
@@ -547,7 +553,7 @@ def _crisp(a, scale: int):
     out = np.empty((h * scale, w * scale, a.shape[2]))
     for c in range(a.shape[2]):
         ch = Image.fromarray((a[..., c] * 255).astype(np.uint8)).resize((w * scale, h * scale), Image.BICUBIC)
-        x = np.clip((np.asarray(ch, float) / 255.0 - 0.45) / 0.3, 0, 1)
+        x = np.clip((np.asarray(ch, float) / 255.0 - 0.52) / 0.1, 0, 1)
         out[..., c] = x * x * (3 - 2 * x)          # smoothstep around the middle
     return out
 

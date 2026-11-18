@@ -205,11 +205,11 @@ def test_camo_generator_stencil_paints_dark_camo_with_lighter_stripes(tmp_path):
     cols = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]]          # tertiary black
     png = paints.stencil_palette(tmp_path / "s.png", [0.6, 0.5, 0.4], cols, 1.0)
     img = np.asarray(Image.open(io.BytesIO(png)))
-    assert img.shape[:2] == (64, 64)                     # enlarged for crisp edges
-    assert list(img[20, 40]) == [0, 0, 0]                # camo: the tertiary paint
-    stripe = img[4, 4]
+    assert img.shape[:2] == (128, 128)                     # enlarged for crisp edges
+    assert list(img[40, 80]) == [0, 0, 0]                # camo: the tertiary paint
+    stripe = img[12, 12]
     assert 0 < stripe[0] < 120 and stripe[0] == stripe[1] == stripe[2]   # neutral grey stripe
-    assert list(img[60, 4]) == [203, 188, 170]           # unmarked: the panel's own color, right way up
+    assert list(img[120, 12]) == [203, 188, 170]           # unmarked: the panel's own color, right way up
 
 
 def test_other_tint_override_stencils_lay_each_channel_in_its_paint(tmp_path):
