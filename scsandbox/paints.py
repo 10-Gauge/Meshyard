@@ -31,7 +31,7 @@ METAL_SPEC = 0.2
 # how dark a stencil's marked areas make the paint under them (1 = no change)
 STENCIL_TONE = 0.45
 GLASS_TINT = 0.3      # how much of the palette glass color the pane shows
-LIVERY_VERSION = 23   # bump to repaint cached painted models
+LIVERY_VERSION = 24   # bump to repaint cached painted models
 DEFAULT = "default"
 # an exported color counts as the ship's default paint when every channel is this close
 MATCH = 0.02
@@ -391,6 +391,42 @@ def _palette_layer_tint(sm: dict | None) -> list[float]:
     return [1.0, 1.0, 1.0]
 
 
+def _split_mounted_materials(doc: dict, prefix: str) -> set[int]:
+    """Give the parts mounted on hardpoints that use the hull's materials their own
+    copies of them, so the hull's livery can skip them. Returns the copies' indices."""
+    nodes, meshes, mats = doc.get("nodes", []), doc.get("meshes", []), doc.get("materials", [])
+    parent = {c: i for i, nd in enumerate(nodes) for c in nd.get("children", [])}
+
+    def mounted(i):
+        seen = set()
+        while i in parent and i not in seen:
+            seen.add(i)
+            p = parent[i]
+            if (nodes[p].get("name") or "").lower().startswith("hardpoint_"):
+                return True
+            i = p
+        return False
+    users: dict[int, set] = {}
+    for i, nd in enumerate(nodes):
+        if "mesh" in nd:
+            users.setdefault(nd["mesh"], set()).add(mounted(i))
+    copies: dict[int, int] = {}
+    for mesh_i, kinds in users.items():
+        if kinds != {True} or mesh_i >= len(meshes):
+            continue          # hull meshes, and meshes the hull shares with a mount, stay
+        for prim in meshes[mesh_i].get("primitives", []):
+            k = prim.get("material")
+            if k is None or not (mats[k].get("name") or "").lower().startswith(prefix):
+                continue
+            if k not in copies:
+                copy = json.loads(json.dumps(mats[k]))
+                copy["name"] = (copy.get("name") or "") + "_mounted"
+                copies[k] = len(mats)
+                mats.append(copy)
+            prim["material"] = copies[k]
+    return set(copies.values())
+
+
 def _use_extension(doc: dict, name: str) -> None:
     used = doc.setdefault("extensionsUsed", [])
     if name not in used:
@@ -447,11 +483,15 @@ def stencil_palette(mask_png: Path, base: list[float], colors: list[list[float]]
         a = _stencil_pixels(mask_png)
     except (OSError, ValueError):
         return None
+    if _generator_stencil(a):
+        a = _crisp(a, 2)
     col = np.ones(a.shape[:2] + (3,)) * np.asarray(base[:3])
     if _generator_stencil(a):
         blue, green = (a[..., 2] * opacity)[..., None], a[..., 1:2] * a[..., 2:3]
         dark = np.asarray(colors[2][:3])
-        light = dark + (np.asarray(base[:3]) - dark) * CAMO_PATTERN_LIFT
+        # neutral grey stripes: the panel's brightness, not its beige
+        lum = float(np.dot(np.asarray(base[:3]), [0.2126, 0.7152, 0.0722]))
+        light = dark + (lum - dark) * CAMO_PATTERN_LIFT
         col = col * (1 - blue) + dark * blue
         col = col * (1 - green) + light * green
         colors = []
@@ -469,6 +509,20 @@ def stencil_palette(mask_png: Path, base: list[float], colors: list[list[float]]
 
 # how far a generator stencil's pattern lifts the camo back toward the panel color
 CAMO_PATTERN_LIFT = 0.2
+
+
+def _crisp(a, scale: int):
+    """The stencil enlarged `scale` times with its soft edges tightened: a camo mask is
+    sharp-edged, but 1024 pixels across a 240 m hull blur into a smear up close."""
+    import numpy as np
+    from PIL import Image
+    h, w = a.shape[:2]
+    out = np.empty((h * scale, w * scale, a.shape[2]))
+    for c in range(a.shape[2]):
+        ch = Image.fromarray((a[..., c] * 255).astype(np.uint8)).resize((w * scale, h * scale), Image.BICUBIC)
+        x = np.clip((np.asarray(ch, float) / 255.0 - 0.3) / 0.4, 0, 1)
+        out[..., c] = x * x * (3 - 2 * x)          # smoothstep around the middle
+    return out
 
 
 def _generator_stencil(a) -> bool:
@@ -573,7 +627,8 @@ def repaint(doc: dict, bin_: bytes, old: dict, new: dict, sources=None, root: Pa
     prefix = f"{stem.lower()}_mtl_" if stem else None
     changed = 0
     neutral: dict = {}   # texture index -> its neutral copy
-    for m in doc.get("materials", []):
+    mounted = _split_mounted_materials(doc, prefix) if prefix and liv is not None else set()
+    for mi, m in enumerate(doc.get("materials", [])):
         ex = m.get("extras") or {}
         pbr = m.setdefault("pbrMetallicRoughness", {})
         sub = ex.get("source_name")
@@ -590,7 +645,10 @@ def repaint(doc: dict, bin_: bytes, old: dict, new: dict, sources=None, root: Pa
                 changed += 1
             continue
         b = base.get(sub)
-        sm = liv.get(sub) if liv is not None else b
+        # parts mounted on hardpoints (the Idris's railgun and turrets) take the paint's
+        # colors on the ship's plain material: the livery's stencil and artwork are laid
+        # out for the hull alone
+        sm = liv.get(sub) if liv is not None and mi not in mounted else b
         if sm is None:
             continue
         ch = _channel(sm)

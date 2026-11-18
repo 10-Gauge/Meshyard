@@ -196,13 +196,20 @@ def test_camo_generator_stencil_paints_dark_camo_with_lighter_stripes(tmp_path):
 
     import numpy as np
     from PIL import Image
-    # blue marks the camo (top row), green its pattern inside the blue (one corner)
-    _stencil_png(tmp_path / "s.png", [(0, c) for c in range(4)], [(0, 0)])
+    # blue marks the camo (top half), green its pattern inside the blue (top left corner)
+    mask = np.zeros((32, 32, 4), np.uint8)
+    mask[..., 3] = 255
+    mask[:16, :, 2] = 255
+    mask[:8, :8, 1] = 255
+    Image.fromarray(mask, "RGBA").save(tmp_path / "s.png")
     cols = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]]          # tertiary black
-    img = np.asarray(Image.open(io.BytesIO(paints.stencil_palette(tmp_path / "s.png", [0.5, 0.5, 0.5], cols, 1.0))))
-    assert list(img[0, 1]) == [0, 0, 0]                  # camo: the tertiary paint
-    assert 0 < img[0, 0, 0] < 188 and img[0, 0, 0] == img[0, 0, 2]   # stripe: lifted toward the panel
-    assert list(img[3, 0]) == [188, 188, 188]            # unmarked: the panel's own color, right way up
+    png = paints.stencil_palette(tmp_path / "s.png", [0.6, 0.5, 0.4], cols, 1.0)
+    img = np.asarray(Image.open(io.BytesIO(png)))
+    assert img.shape[:2] == (64, 64)                     # enlarged for crisp edges
+    assert list(img[20, 40]) == [0, 0, 0]                # camo: the tertiary paint
+    stripe = img[4, 4]
+    assert 0 < stripe[0] < 120 and stripe[0] == stripe[1] == stripe[2]   # neutral grey stripe
+    assert list(img[60, 4]) == [203, 188, 170]           # unmarked: the panel's own color, right way up
 
 
 def test_other_tint_override_stencils_lay_each_channel_in_its_paint(tmp_path):
@@ -223,3 +230,15 @@ def test_panel_tint_scales_its_palette_color():
                                                       {"name": "PaletteTint", "value": "1"}]}]}
     assert paints._palette_layer_tint(sm) == [0.5, 0.5, 0.5]
     assert paints._palette_layer_tint({}) == [1.0, 1.0, 1.0]
+
+
+def test_parts_on_hardpoints_get_their_own_copy_of_hull_materials():
+    doc = {"nodes": [{"name": "Ship", "children": [1, 2]}, {"name": "hull", "mesh": 0},
+                     {"name": "hardpoint_nose_railgun", "children": [3]}, {"name": "Railgun", "mesh": 1}],
+           "meshes": [{"primitives": [{"material": 0}]}, {"primitives": [{"material": 0}, {"material": 1}]}],
+           "materials": [{"name": "Idris_mtl_Dark_Panel_07"}, {"name": "railgun_own"}]}
+    copies = paints._split_mounted_materials(doc, "idris_mtl_")
+    assert doc["meshes"][0]["primitives"][0]["material"] == 0          # the hull keeps its material
+    moved = doc["meshes"][1]["primitives"][0]["material"]
+    assert moved in copies and doc["materials"][moved]["name"].endswith("_mounted")
+    assert doc["meshes"][1]["primitives"][1]["material"] == 1          # its own material stays
