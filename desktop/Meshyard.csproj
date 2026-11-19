@@ -21,7 +21,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>1.7.3</Version>
+    <Version>1.7.4</Version>
     <Product>Meshyard</Product>
     <AssemblyTitle>Meshyard</AssemblyTitle>
     <!-- The packaged engine (PyInstaller exe) to embed; build_exe.ps1 passes it. -->

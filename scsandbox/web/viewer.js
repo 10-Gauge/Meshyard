@@ -479,6 +479,13 @@ function tune(m) {
     m.needsUpdate = true;
   } else if (/decal/i.test(shader) || m.transparent) {
     m.roughness = Math.max(m.roughness, 0.45);
+    if (/decal/i.test(shader)) {
+      // decals lie right on the hull: pull them toward the camera or the two flicker
+      // through each other (the Idris Sharktooth's mouth broke up on the port door)
+      m.polygonOffset = true;
+      m.polygonOffsetFactor = -2;
+      m.polygonOffsetUnits = -4;
+    }
   } else if (!painted && (RAW_METAL.test(m.name) || /\/metal\//i.test(layers))) {
     m.metalness = 0.85;
     m.roughness = Math.min(Math.max(m.roughness, 0.25), 0.55);

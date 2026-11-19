@@ -179,23 +179,50 @@ def test_fleck_stencils_color_the_marked_areas_and_make_them_metal(tmp_path):
     assert m[0, 0, 2] == 255 and m[3, 0, 2] == 0         # metal only where marked
 
 
-def test_tint_override_stencil_paints_the_palette_colors_upside_down_on_uv2(tmp_path):
-    import io
-
+def _stencil_png(path, blue, green):
     import numpy as np
     from PIL import Image
     mask = np.zeros((4, 4, 4), np.uint8)
     mask[..., 3] = 255
-    mask[0, :, 2] = 255            # blue on the image's top row: the tertiary paint
-    mask[0, :1, 1] = 255           # green over it in one corner: the secondary paint
+    for r, c in blue:
+        mask[r, c, 2] = 255
+    for r, c in green:
+        mask[r, c, 1] = 255
+    Image.fromarray(mask, "RGBA").save(path)
+
+
+def test_camo_generator_stencil_paints_dark_camo_with_lighter_stripes(tmp_path):
+    import io
+
+    import numpy as np
+    from PIL import Image
+    # blue marks the camo (top half), green its pattern inside the blue (top left corner)
+    mask = np.zeros((32, 32, 4), np.uint8)
+    mask[..., 3] = 255
+    mask[:16, :, 2] = 255
+    mask[:8, :8, 1] = 255
     Image.fromarray(mask, "RGBA").save(tmp_path / "s.png")
+    cols = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]]          # tertiary black
+    png = paints.stencil_palette(tmp_path / "s.png", [0.6, 0.5, 0.4], cols, 1.0)
+    img = np.asarray(Image.open(io.BytesIO(png)))
+    assert img.shape[:2] == (128, 128)                     # enlarged for crisp edges
+    assert list(img[40, 80]) == [0, 0, 0]                # camo: the tertiary paint
+    stripe = img[12, 12]
+    assert 0 < stripe[0] < 120 and stripe[0] == stripe[1] == stripe[2]   # neutral grey stripe
+    assert list(img[120, 12]) == [203, 188, 170]           # unmarked: the panel's own color, right way up
+
+
+def test_other_tint_override_stencils_lay_each_channel_in_its_paint(tmp_path):
+    import io
+
+    import numpy as np
+    from PIL import Image
+    # green outside the blue: not a camo generator
+    _stencil_png(tmp_path / "s.png", [(0, 1)], [(1, 0), (1, 1)])
     cols = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
     img = np.asarray(Image.open(io.BytesIO(paints.stencil_palette(tmp_path / "s.png", [0.5, 0.5, 0.5], cols, 1.0))))
-    assert list(img[0, 1]) == [0, 0, 255] and list(img[0, 0]) == [0, 255, 0]
-    assert list(img[3, 0]) == [188, 188, 188]          # unmarked: the panel's own color
-    flipped = np.asarray(Image.open(io.BytesIO(
-        paints.stencil_palette(tmp_path / "s.png", [0.5, 0.5, 0.5], cols, 1.0, flip=True))))
-    assert list(flipped[3, 1]) == [0, 0, 255]
+    assert list(img[0, 1]) == [0, 0, 255] and list(img[1, 0]) == [0, 255, 0]
+    assert list(img[3, 0]) == [188, 188, 188]
 
 
 def test_panel_tint_scales_its_palette_color():
@@ -203,3 +230,15 @@ def test_panel_tint_scales_its_palette_color():
                                                       {"name": "PaletteTint", "value": "1"}]}]}
     assert paints._palette_layer_tint(sm) == [0.5, 0.5, 0.5]
     assert paints._palette_layer_tint({}) == [1.0, 1.0, 1.0]
+
+
+def test_parts_on_hardpoints_get_their_own_copy_of_hull_materials():
+    doc = {"nodes": [{"name": "Ship", "children": [1, 2]}, {"name": "hull", "mesh": 0},
+                     {"name": "hardpoint_nose_railgun", "children": [3]}, {"name": "Railgun", "mesh": 1}],
+           "meshes": [{"primitives": [{"material": 0}]}, {"primitives": [{"material": 0}, {"material": 1}]}],
+           "materials": [{"name": "Idris_mtl_Dark_Panel_07"}, {"name": "railgun_own"}]}
+    copies = paints._split_mounted_materials(doc, "idris_mtl_", {"Railgun"})
+    assert doc["meshes"][0]["primitives"][0]["material"] == 0          # the hull keeps its material
+    moved = doc["meshes"][1]["primitives"][0]["material"]
+    assert moved in copies and doc["materials"][moved]["name"].endswith("_mounted")
+    assert doc["meshes"][1]["primitives"][1]["material"] == 1          # its own material stays

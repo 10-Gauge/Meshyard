@@ -31,7 +31,7 @@ METAL_SPEC = 0.2
 # how dark a stencil's marked areas make the paint under them (1 = no change)
 STENCIL_TONE = 0.45
 GLASS_TINT = 0.3      # how much of the palette glass color the pane shows
-LIVERY_VERSION = 22   # bump to repaint cached painted models
+LIVERY_VERSION = 27   # bump to repaint cached painted models
 DEFAULT = "default"
 # an exported color counts as the ship's default paint when every channel is this close
 MATCH = 0.02
@@ -291,17 +291,16 @@ def _add_texture(doc: dict, bin_: bytes, png: bytes) -> tuple[bytes, int]:
     return bin_, len(textures) - 1
 
 
-def _stencil_pixels(mask_png: Path, flip: bool):
-    """The stencil as an RGBA float array, upside down for a stencil on the second uv set
-    (the export flips the first set's v but not the second's, so unflipped the Idris
-    Sharktooth's tiger stripes land as scattered blotches)."""
+def _stencil_pixels(mask_png: Path):
+    """The stencil as an RGBA float array, as the image stores it: the second uv set reads
+    it the right way up (flipped, the Idris Sharktooth's camo landed on its underside and
+    its beige on top of the nose)."""
     import numpy as np
     from PIL import Image
-    a = np.asarray(Image.open(mask_png).convert("RGBA"), float) / 255.0
-    return np.flipud(a) if flip else a
+    return np.asarray(Image.open(mask_png).convert("RGBA"), float) / 255.0
 
 
-def stencil_tone(mask_png: Path, override: float, flip: bool = False) -> bytes | None:
+def stencil_tone(mask_png: Path, override: float) -> bytes | None:
     """The stencil as a grey multiplier image (sRGB-encoded so it reads back linear):
     the marked areas of the stencil's first `override` channels darken the paint under
     them, the way StarBreaker's add-on reads the game's stencils. None if unreadable."""
@@ -310,7 +309,7 @@ def stencil_tone(mask_png: Path, override: float, flip: bool = False) -> bytes |
     import numpy as np
     from PIL import Image
     try:
-        a = _stencil_pixels(mask_png, flip)
+        a = _stencil_pixels(mask_png)
     except (OSError, ValueError):
         return None
     tone = np.ones(a.shape[:2])
@@ -392,6 +391,75 @@ def _palette_layer_tint(sm: dict | None) -> list[float]:
     return [1.0, 1.0, 1.0]
 
 
+def mounted_items(doc: dict) -> set[str]:
+    """Names of the items mounted on hardpoints (the hardpoints' children)."""
+    nodes = doc.get("nodes", [])
+    return {nodes[c].get("name") or "" for nd in nodes if (nd.get("name") or "").lower().startswith("hardpoint_")
+            for c in nd.get("children", [])} - {""}
+
+
+def own_paint_items(install: Install, doc: dict, paint: str) -> set[str]:
+    """The mounted items that skip the hull's livery: everything but the doors (hull
+    panels that open: the Idris's hangar doors carry the camo and the shark's mouth),
+    and any door whose own record has a geometry entry for this paint. In the game the
+    Sharktooth's railgun, torpedo rack and turrets wear their own material in its
+    colors."""
+    tag = re.compile(r'"Tags"\s*:\s*"(?:[^"]*\s)?' + re.escape(paint) + r'(?:\s[^"]*)?"')
+    found = set()
+    con = catalog.connect(install)
+    try:
+        for name in mounted_items(doc):
+            row = con.execute("SELECT record_path FROM assets WHERE record = ? COLLATE NOCASE LIMIT 1", (name,)).fetchone()
+            rel = (row[0] if row else "") or ""
+            if "/doors/" not in rel.replace("\\", "/").lower() and not name.lower().startswith("door_"):
+                found.add(name)
+                continue
+            try:
+                if tag.search((_records(install) / rel).read_text(encoding="utf-8")):
+                    found.add(name)
+            except OSError:
+                pass
+    finally:
+        con.close()
+    return found
+
+
+def _split_mounted_materials(doc: dict, prefix: str, items: set[str]) -> set[int]:
+    """Give the parts of the named mounted items that use the hull's materials their own
+    copies of them, so the hull's livery can skip them. Returns the copies' indices."""
+    nodes, meshes, mats = doc.get("nodes", []), doc.get("meshes", []), doc.get("materials", [])
+    parent = {c: i for i, nd in enumerate(nodes) for c in nd.get("children", [])}
+
+    def mounted(i):
+        seen = set()
+        while i in parent and i not in seen:
+            seen.add(i)
+            p = parent[i]
+            if (nodes[p].get("name") or "").lower().startswith("hardpoint_"):
+                return (nodes[i].get("name") or "") in items
+            i = p
+        return False
+    users: dict[int, set] = {}
+    for i, nd in enumerate(nodes):
+        if "mesh" in nd:
+            users.setdefault(nd["mesh"], set()).add(mounted(i))
+    copies: dict[int, int] = {}
+    for mesh_i, kinds in users.items():
+        if kinds != {True} or mesh_i >= len(meshes):
+            continue          # hull meshes, and meshes the hull shares with a mount, stay
+        for prim in meshes[mesh_i].get("primitives", []):
+            k = prim.get("material")
+            if k is None or not (mats[k].get("name") or "").lower().startswith(prefix):
+                continue
+            if k not in copies:
+                copy = json.loads(json.dumps(mats[k]))
+                copy["name"] = (copy.get("name") or "") + "_mounted"
+                copies[k] = len(mats)
+                mats.append(copy)
+            prim["material"] = copies[k]
+    return set(copies.values())
+
+
 def _use_extension(doc: dict, name: str) -> None:
     used = doc.setdefault("extensionsUsed", [])
     if name not in used:
@@ -430,20 +498,36 @@ def _stencil_colors(sm: dict, pal: dict) -> list[list[float]]:
             for c in range(3)]
 
 
-def stencil_palette(mask_png: Path, base: list[float], colors: list[list[float]], opacity: float,
-                    flip: bool = False) -> bytes | None:
-    """Base color image for a tint-override stencil: the panel's own color, with each
-    stencil channel's areas in its color (blue first, red on top, so the Sharktooth's
-    outlines sit over its stripes). A channel flat all over marks nothing."""
+def stencil_palette(mask_png: Path, base: list[float], colors: list[list[float]], opacity: float) -> bytes | None:
+    """Base color image for a tint-override stencil.
+
+    A camo "generator" stencil (blue marks the camo, green its pattern inside the blue:
+    the Idris Sharktooth) paints the camo in the tertiary paint, black on the Sharktooth,
+    and the pattern part way back toward the panel's own color: the dark grey hull with
+    lighter grey tiger stripes the game shows. Its red only edges the camo and paints
+    nothing. Other stencils lay each channel's areas in its color (blue first, red on top:
+    the Avenger's grey black red camo in three greys). A channel flat all over marks
+    nothing."""
     import io
 
     import numpy as np
     from PIL import Image
     try:
-        a = _stencil_pixels(mask_png, flip)
+        a = _stencil_pixels(mask_png)
     except (OSError, ValueError):
         return None
+    if _generator_stencil(a):
+        a = _crisp(a, 4)
     col = np.ones(a.shape[:2] + (3,)) * np.asarray(base[:3])
+    if _generator_stencil(a):
+        blue, green = (a[..., 2] * opacity)[..., None], a[..., 1:2] * a[..., 2:3]
+        dark = np.asarray(colors[2][:3])
+        # neutral grey stripes: the panel's brightness, not its beige
+        lum = float(np.dot(np.asarray(base[:3]), [0.2126, 0.7152, 0.0722]))
+        light = dark + (lum - dark) * CAMO_PATTERN_LIFT
+        col = col * (1 - blue) + dark * blue
+        col = col * (1 - green) + light * green
+        colors = []
     for c in reversed(range(len(colors))):
         ch = a[..., c]
         if ch.max() - ch.min() < 0.02:
@@ -456,8 +540,36 @@ def stencil_palette(mask_png: Path, base: list[float], colors: list[list[float]]
     return buf.getvalue()
 
 
-def stencil_flecks(mask_png: Path, base: list[float], colors: list[list[float]], opacity: float,
-                   flip: bool = False):
+# how far a generator stencil's pattern lifts the camo back toward the panel color
+CAMO_PATTERN_LIFT = 0.15
+
+
+def _crisp(a, scale: int):
+    """The stencil enlarged `scale` times with its soft edges tightened: a camo mask is
+    sharp-edged, but 1024 pixels across a 240 m hull blur into a smear up close."""
+    import numpy as np
+    from PIL import Image
+    h, w = a.shape[:2]
+    out = np.empty((h * scale, w * scale, a.shape[2]))
+    for c in range(a.shape[2]):
+        ch = Image.fromarray((a[..., c] * 255).astype(np.uint8)).resize((w * scale, h * scale), Image.BICUBIC)
+        x = np.clip((np.asarray(ch, float) / 255.0 - 0.52) / 0.1, 0, 1)
+        out[..., c] = x * x * (3 - 2 * x)          # smoothstep around the middle
+    return out
+
+
+def _generator_stencil(a) -> bool:
+    """Whether a stencil marks its camo in blue with the pattern in green inside it (the
+    Idris Sharktooth's): both channels vary and nearly all the green lies on blue."""
+    import numpy as np
+    b, g = a[..., 2], a[..., 1]
+    if np.ptp(b) < 0.02 or np.ptp(g) < 0.02:
+        return False
+    green = g > 0.5
+    return bool(green.any()) and float((green & (b > 0.5)).sum()) / float(green.sum()) > 0.95
+
+
+def stencil_flecks(mask_png: Path, base: list[float], colors: list[list[float]], opacity: float):
     """Base color and metal/roughness images for a fleck stencil: the paint, with the
     stencil's first two channels' areas in their spec colors as polished metal."""
     import io
@@ -465,7 +577,7 @@ def stencil_flecks(mask_png: Path, base: list[float], colors: list[list[float]],
     import numpy as np
     from PIL import Image
     try:
-        a = _stencil_pixels(mask_png, flip)
+        a = _stencil_pixels(mask_png)
     except (OSError, ValueError):
         return None, None
     col = np.ones(a.shape[:2] + (3,)) * np.asarray(base[:3])
@@ -539,7 +651,8 @@ def _neutral_base_texture(doc: dict, bin_: bytes, pbr: dict, cache: dict) -> byt
     return bin_
 
 
-def repaint(doc: dict, bin_: bytes, old: dict, new: dict, sources=None, root: Path | None = None) -> tuple[bytes, int]:
+def repaint(doc: dict, bin_: bytes, old: dict, new: dict, sources=None, root: Path | None = None,
+            own_paint: set[str] | None = None) -> tuple[bytes, int]:
     """Paint a glTF document: hull materials follow the livery's material (its palette
     routing, stencil and textures) when sources are known; other paintable materials
     (gear, attachments in the ship's palette) swap the default colors for the paint's.
@@ -548,7 +661,8 @@ def repaint(doc: dict, bin_: bytes, old: dict, new: dict, sources=None, root: Pa
     prefix = f"{stem.lower()}_mtl_" if stem else None
     changed = 0
     neutral: dict = {}   # texture index -> its neutral copy
-    for m in doc.get("materials", []):
+    mounted = _split_mounted_materials(doc, prefix, own_paint or set()) if prefix and liv is not None else set()
+    for mi, m in enumerate(doc.get("materials", [])):
         ex = m.get("extras") or {}
         pbr = m.setdefault("pbrMetallicRoughness", {})
         sub = ex.get("source_name")
@@ -565,7 +679,10 @@ def repaint(doc: dict, bin_: bytes, old: dict, new: dict, sources=None, root: Pa
                 changed += 1
             continue
         b = base.get(sub)
-        sm = liv.get(sub) if liv is not None else b
+        # parts mounted on hardpoints whose own record names this paint (the Idris's
+        # railgun and torpedo rack) take its colors on their plain material, as the game
+        # does; the rest (its hangar doors) wear the hull's livery
+        sm = liv.get(sub) if liv is not None and mi not in mounted else b
         if sm is None:
             continue
         ch = _channel(sm)
@@ -616,17 +733,15 @@ def repaint(doc: dict, bin_: bytes, old: dict, new: dict, sources=None, root: Pa
                 uv = 1 if _param(sm, "UseUV2ForStencil", 0) > 0.5 else 0
                 flecks = _stencil_specs(sm)
                 if flecks:
-                    png, mr = stencil_flecks(root / st, pbr.get("baseColorFactor") or [1, 1, 1, 1], *flecks,
-                                             flip=uv == 1)
+                    png, mr = stencil_flecks(root / st, pbr.get("baseColorFactor") or [1, 1, 1, 1], *flecks)
                     pbr["baseColorFactor"] = [1.0, 1.0, 1.0, (pbr.get("baseColorFactor") or [1, 1, 1, 1])[3]]
                 elif _param(sm, "StencilTintOverride", 0) > 0:
                     png, mr = stencil_palette(root / st, pbr.get("baseColorFactor") or [1, 1, 1, 1],
                                               _stencil_colors(sm, new),
-                                              max(0.0, min(1.0, _param(sm, "StencilOpacity", 1.0))),
-                                              flip=uv == 1), None
+                                              max(0.0, min(1.0, _param(sm, "StencilOpacity", 1.0)))), None
                     pbr["baseColorFactor"] = [1.0, 1.0, 1.0, (pbr.get("baseColorFactor") or [1, 1, 1, 1])[3]]
                 else:
-                    png, mr = stencil_tone(root / st, 1, flip=uv == 1), None
+                    png, mr = stencil_tone(root / st, 1), None
                 if png:
                     tiling = _param(sm, "StencilTiling", 1.0) or 1.0
                     ext = {"KHR_texture_transform": {"scale": [tiling, tiling]}}
@@ -815,12 +930,12 @@ def livery_faces(install: Install, settings: dict, asset: dict, pkg: Path, geo_p
 
 # Stencils this narrow came out of the paint package at an eighth of their size: a fine
 # camo (the Idris Sharktooth's tiger stripes) blurs into flat grey there.
-STENCIL_MIN_PX = 512
+STENCIL_MIN_PX = 1024
 
 
 def sharpen_stencils(install: Install, settings: dict, root: Path, sources, log=print) -> int:
-    """Swap the package's small stencil images for larger ones decoded from the game
-    files (one mip down from full size). Returns how many were replaced."""
+    """Swap the package's small stencil images for the full-size ones decoded from the
+    game files. Returns how many were replaced."""
     from PIL import Image
     _, base, liv = sources
     paths = {_texture(sm, "stencil", "TexSlot7") for sm in [*base.values(), *(liv or {}).values()]}
@@ -858,7 +973,8 @@ def _repainted(install: Install, settings: dict, asset: dict, glb: Path, paint: 
         if sources:
             sharpen_stencils(install, settings, pkg.parent.parent, sources, log)
         doc, bin_, version = models._read_glb(glb)
-        bin_, n = repaint(doc, bin_, old, new, sources, pkg.parent.parent if pkg else None)
+        own = own_paint_items(install, doc, paint) if sources and sources[2] is not None else set()
+        bin_, n = repaint(doc, bin_, old, new, sources, pkg.parent.parent if pkg else None, own)
         if sources and sources[2] is not None:
             names = _activated(sources[1], sources[2])
             geo = _paint_geometry(_record_json(install, asset) or {}, paint) if names else ""
